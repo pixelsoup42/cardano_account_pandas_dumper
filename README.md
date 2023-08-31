@@ -30,7 +30,7 @@ You can then load `report.csv` in your favorite spreadsheet software (eg. Libreo
 
 If you get a [blockfrost.io](https://blockfrost.io) API error, or if execution is very slow, please see the `blockfrost_project_id` command line flag below.
 
-This basic usage just lists all transaction that affect the specified staking addresses, with the total of each owned asset at the end of the specified `to_block`.
+This basic usage just lists all transactions that affect the specified staking addresses, with the total of each owned asset at the end of the specified `to_block`.
 
 ## Advanced usage
 
@@ -53,7 +53,7 @@ If you use this tool seriously you're probably better off getting a paid plan.
 
 `--checkpoint_output CHECKPOINT_OUTPUT`
 : Path to checkpoint file to create, if any.
-This is useful for development, the checkpoint contains all the data fetched from the API so you can tweak the report format without having call the API on every run, which would be very slow and consume quota.
+This is useful for development, the checkpoint contains all the data fetched from the API so you can tweak the report format without having to call the API on every run, which would be very slow and consume quota.
 
 `--to_block TO_BLOCK`
 : Block number to end the search at, if unspecified the tool will look up the latest known block from the API.
@@ -78,7 +78,7 @@ Addresses belonging to one of the specified staking addresses are labeled as `ow
 With `--detail_level=2`, known addresses are listed with their name, other addresses are labeled as `other`.
 
 `--detail_level DETAIL_LEVEL`
-: Level of detail of report (1=only own addresses, 2=other addresses as well)
+: Level of detail of report (1=only own addresses, 2=other addresses as well).
 By default (`--detail_level=1`), only addresses linked to the specified staking addresses will be shown.
 With `--detail_level=2`, all addresses will be shown.
 
@@ -128,4 +128,4 @@ Writing good tools takes time, effort and talent. If this tool is useful to you,
 
 or purchasing one of our cool [PixelSoup NFTs](https://www.jpg.store/PixelSoup?tab=listings) !
 
-Donations and NFT purchases are both really appreciated, the advantage of an NFT purchase is that there is nonzero probability of financial upside.
+Donations and NFT purchases are both really appreciated, the advantage of an NFT purchase is that there is a nonzero probability of financial upside.
