@@ -251,9 +251,6 @@ class AccountPandasDumper:
             self._truncate(script),
         )
 
-    def _format_amount(self, amount: Namespace) -> str:
-        return f"{self._format_asset(amount.unit)}:{amount.quantity}"
-
     def _format_address(self, address: str) -> str:
         if address in self.data.own_addresses:
             return " own"
