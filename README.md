@@ -49,6 +49,7 @@ With `--detail_level 2`, the tool outputs not only the balance and UTXOs of the 
 : Blockfrost API key, create your own at <https://blockfrost.io/dashboard>.
 This tool comes with its own prepackaged API key that uses the Free plan, so it will be rate limited and capped.
 It is likely to be overused and/or abused, so you're better off creating your own.
+If you use this tool seriously you're probably better off getting a paid plan.
 
 `--checkpoint_output CHECKPOINT_OUTPUT`
 : Path to checkpoint file to create, if any.
