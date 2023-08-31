@@ -1,0 +1,10 @@
+.mypy_cache
+.venv
+.vscode
+.~*
+*.pickle
+*.csv
+*.bak
+build
+*.egg-info
+**/__pycache__

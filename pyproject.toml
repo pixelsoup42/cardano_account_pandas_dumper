@@ -1,0 +1,26 @@
+[project]
+name = "cardano_account_pandas_dumper"
+version = "2023.1.0"
+description = "Create a spreadsheet with the owned amount of any Cardano asset at the end of a specific block, and a record of the transactions that affected it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+keywords = ["Cardano", "Pandas", "report", "wallet"]
+dependencies = ["jstyleson", "pandas", "blockfrost-python"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cardano_account_pandas_dumper = ["*.jsonc"]
+
+[tool.mypy]
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = "blockfrost.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "jstyleson"
+ignore_missing_imports = true
