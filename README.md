@@ -129,3 +129,21 @@ Writing good tools takes time, effort and talent. If this tool is useful to you,
 or purchasing one of our cool [PixelSoup NFTs](https://www.jpg.store/PixelSoup?tab=listings) !
 
 Donations and NFT purchases are both really appreciated, the advantage of an NFT purchase is that there is a nonzero probability of financial upside.
+
+## Comparison with [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter)
+
+After finishing this tool, I was made aware that another comparable project existed: [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter)
+
+Here is a comparison table for both projects (please submit corrections if you think anything is wrong):
+
+| Feature | [cardano_account_pandas_dumper](https://github.com/pixelsoup42/cardano_account_pandas_dumper) | [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter) |
+| ------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------|
+| coingecko integration for fiat price |❌|✔️[^1]|
+| Knows about assets other than ADA |✔️|❌|
+| Knows about DeFI contract addresses |✔️|❌|
+| Extracts message information from tx metadata |✔️|❌|
+| Decimal arithmetic for absolute precision |✔️|❌|
+| Ready to use after one-liner install command |✔️|❌|
+| Mypy clean |✔️|❌|
+
+[^1]: Could not get this to work
