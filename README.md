@@ -149,6 +149,7 @@ Here is a comparison table for both projects (please submit corrections if you t
 | Ready to use after one-liner install command |✔️|❌|
 | Code is [Mypy](https://mypy-lang.org/) clean |✔️|❌|
 | Lines of Python code in repo (2023-09-01)| 529 | 1011|
+| Has a cool logo 😉 |✔️|❌|
 
 <!-- markdownlint-disable MD053 -->
 
