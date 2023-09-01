@@ -242,7 +242,7 @@ class AccountPandasDumper:
                 for utxo in tx_obj.utxos.nonref_inputs + tx_obj.utxos.outputs
             ]
         ):
-            result = ["(Local)"]
+            result = ["(internal)"]
         return " ".join(result)
 
     def _format_script(self, script: str) -> str:
