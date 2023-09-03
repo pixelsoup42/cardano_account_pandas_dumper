@@ -130,7 +130,7 @@ or purchasing one of our cool [PixelSoup NFTs](https://www.jpg.store/PixelSoup?t
 
 Donations and NFT purchases are both really appreciated, the advantage of an NFT purchase is that there is a nonzero probability of financial upside.
 
-If you think this tool can be useful to others, please retweet [the announcement] (https://twitter.com/PixelSoup42/status/1697305462721396957)
+If you think this tool can be useful to others, please retweet [the announcement](https://twitter.com/PixelSoup42/status/1697305462721396957)
 
 ## Comparison with [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter)
 
