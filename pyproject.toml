@@ -9,7 +9,7 @@ keywords = ["Cardano", "Pandas", "report", "wallet"]
 dependencies = ["jstyleson", "pandas", "blockfrost-python"]
 
 [project.scripts]
-cardano_account_pandas_dumper = "cardano_account_pandas_dumper"
+cardano_account_pandas_dumper = "cardano_account_pandas_dumper:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
