@@ -89,7 +89,8 @@ def _create_arg_parser():
     return result
 
 
-if __name__ == "__main__":
+def main():
+    """Main function."""
     parser = _create_arg_parser()
     args = parser.parse_args()
     if not any([args.checkpoint_output, args.csv_output, args.pandas_output]):
@@ -103,8 +104,8 @@ if __name__ == "__main__":
     if args.from_checkpoint:
         try:
             data_from_api = pickle.load(args.from_checkpoint)
-        except (pickle.UnpicklingError, OSError) as e:
-            parser.exit(status=2, message=f"Failed to read checkpoint: {e}")
+        except (pickle.UnpicklingError, OSError) as exception:
+            parser.exit(status=2, message=f"Failed to read checkpoint: {exception}")
         if (
             staking_addresses_set
             and staking_addresses_set != data_from_api.staking_addresses
@@ -132,11 +133,11 @@ if __name__ == "__main__":
                 staking_addresses=staking_addresses_set,
                 to_block=args.to_block,
             )
-        except (ApiError, JSONDecodeError, OSError) as e:
+        except (ApiError, JSONDecodeError, OSError) as exception:
             parser.exit(
                 status=2,
                 message=(
-                    f"Failed to read data from blockfrost.io: {e},"
+                    f"Failed to read data from blockfrost.io: {exception},"
                     + " maybe create your own API key at https://blockfrost.io/dashboard and "
                     + "specify it with the --blockfrost_project_id flag."
                 ),
@@ -145,8 +146,8 @@ if __name__ == "__main__":
             try:
                 pickle.dump(obj=data_from_api, file=args.checkpoint_output)
                 args.checkpoint_output.flush()
-            except (pickle.PicklingError, OSError) as e:
-                warnings.warn(f"Failed to write checkpoint: {e}")
+            except (pickle.PicklingError, OSError) as exception:
+                warnings.warn(f"Failed to write checkpoint: {exception}")
     else:
         parser.exit(status=1, message="Staking address(es) required.")
     reporter = AccountPandasDumper(
@@ -161,18 +162,22 @@ if __name__ == "__main__":
     if args.pandas_output:
         try:
             dataframe.to_pickle(args.pandas_output)
-        except (pickle.PicklingError, OSError) as e:
-            warnings.warn(f"Failed to write pandas file: {e}")
+        except (pickle.PicklingError, OSError) as exception:
+            warnings.warn(f"Failed to write pandas file: {exception}")
     # Add total line at the bottom for csv output.
     total = ["", "Total", ""]
-    for c in dataframe.columns[3:]:
+    for column in dataframe.columns[3:]:
         # Only NaN is float in the column
-        total.append(sum([a for a in dataframe[c] if not isinstance(a, float)]))
+        total.append(sum([a for a in dataframe[column] if not isinstance(a, float)]))
     dataframe.loc["Total"] = total
 
     if args.csv_output:
         try:
             dataframe.to_csv(args.csv_output, index=False)
-        except OSError as e:
-            warnings.warn(f"Failed to write CSV file: {e}")
+        except OSError as exception:
+            warnings.warn(f"Failed to write CSV file: {exception}")
     print("Done.")
+
+
+if __name__ == "__main__":
+    main()
