@@ -15,7 +15,7 @@ Also, provide a reusable module that lets you turn the transaction history of sp
 ## Installation
 
 ```sh
-pip install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper
+pipx install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper
 ```
 
 ## Basic Usage
@@ -23,7 +23,7 @@ pip install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper
 The simplest use case is to just run the tool, specifying the CSV output file name and the staking address(es) you are interested in:
 
 ```sh
-python3 -m cardano_account_pandas_dumper  --csv_output report.csv <staking_address1> <staking_address2> ...
+cardano_account_pandas_dumper  --csv_output report.csv <staking_address1> <staking_address2> ...
 ```
 
 You can then load `report.csv` in your favorite spreadsheet software (eg. Libreoffice Calc or Excel)
@@ -35,7 +35,7 @@ This basic usage just lists all transactions that affect the specified staking a
 ## Advanced usage
 
 ```sh
-python3 -m cardano_account_pandas_dumper --detail_level 2 --csv_output report.csv <staking_address1> <staking_address2> ...
+cardano_account_pandas_dumper --detail_level 2 --csv_output report.csv <staking_address1> <staking_address2> ...
 ```
 
 With `--detail_level 2`, the tool outputs not only the balance and UTXOs of the owned addresses, but also includes external contracts and addresses.
