@@ -11,13 +11,15 @@ Also, provide a reusable module that lets you turn the transaction history of sp
 ## Requirements
 
 * Python 3.11, possibly works with lower versions, not tested.
-* `pipx`(available through your distribution as a package).
+* `pipx` and `git` (available through your distribution as packages).
 
 ## Installation
 
 ```sh
 pipx install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper
 ```
+
+Try to run `cardano_account_pandas_dumper -h`. If it fails with `cardano_account_pandas_dumper: command not found`, you need to run `pipx ensurepath` and open a new terminal window to use the tool.
 
 ## Basic Usage
 
