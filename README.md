@@ -11,6 +11,7 @@ Also, provide a reusable module that lets you turn the transaction history of sp
 ## Requirements
 
 * Python 3.11, possibly works with lower versions, not tested.
+* `pipx`(available through your distribution as a package).
 
 ## Installation
 
