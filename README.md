@@ -112,7 +112,11 @@ If you want to preserve accuracy the best way is probably to write a serialized 
 
 * The first obvious possible improvement would be to replace the static `--known_file` that lists the known addresses, policies and scripts with a dynamic API.
 
-The [blockfrost.io](https://blockfrost.io) API already provides some metadata for assets, but AFAIK not for addresses, scripts and policies. Any suggestion to improve this would be greatly appreciated (please open a GitHub issue).
+The [blockfrost.io](https://blockfrost.io) API already provides some metadata for assets, but AFAIK not for addresses, scripts and policies.
+
+The current list of addresses, scripts and policies was gleaned from external sources like [cardanoscan.io](https://cardanoscan.io) and [cexplorer.io](https://cexplorer.io).
+
+Any suggestion to improve this would be greatly appreciated (please open a GitHub issue).
 
 * If you have other improvements or bug fixes in mind, please open a GitHub issue or send a PR.
 
