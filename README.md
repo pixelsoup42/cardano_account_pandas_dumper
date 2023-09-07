@@ -6,12 +6,12 @@
 
 Create a spreadsheet with the owned amount of any Cardano asset at the end of a specific block, and a record of the transactions that affected it.
 
-Also, provide a reusable module that lets you turn the transaction history of specified staking addresses into a Pandas dataframe for further analysis and processing.
+Also, provide a reusable module that lets you turn the transaction history of specified staking addresses into a [Pandas](https://pandas.pydata.org/) dataframe for further analysis and processing.
 
 ## Requirements
 
 * Python 3.11, possibly works with lower versions, not tested.
-* `pipx` and `git` (available through your distribution as packages).
+* [`pipx`](https://pypa.github.io/pipx/) and `git` (available through your distribution as packages).
 
 ## Installation
 
@@ -19,7 +19,7 @@ Also, provide a reusable module that lets you turn the transaction history of sp
 pipx install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper
 ```
 
-Try to run `cardano_account_pandas_dumper -h`. If it fails with `cardano_account_pandas_dumper: command not found`, you need to run `pipx ensurepath` and open a new terminal window to use the tool.
+Try to run `cardano_account_pandas_dumper -h`. If it fails with `cardano_account_pandas_dumper: command not found`, you need to run `pipx ensurepath` and open a new terminal window to use the tool. If it still doesn't work, you probably need to relogin. This is a one-time setup for all [`pipx`](https://pypa.github.io/pipx/) installs.
 
 ## Basic Usage
 
@@ -71,7 +71,7 @@ The checkpoint must have been created with the `--checkpoint_output` flag.
 
 `--pandas_output PANDAS_OUTPUT`
 : Path to pickled Pandas dataframe output file.
-If you want to further process the data with Pandas, you can serialize the generated `DataFrame` into a file.
+If you want to further process the data with [Pandas](https://pandas.pydata.org/), you can serialize the generated `DataFrame` into a file.
 
 `--csv_output CSV_OUTPUT`
 : Path to CSV output file.
@@ -109,7 +109,7 @@ This is useful if you need to look up a specific asset.
 All calculations are done using Python decimals to preserve accuracy.
 However when importing into a spreadsheet, the values are usually converted to floats and some rounding errors can occur.
 This is a spreadsheet issue, there isn't much that can be done by this tool to avoid it.
-If you want to preserve accuracy the best way is probably to write a serialized Pandas dataframe and write some code to process it.
+If you want to preserve accuracy the best way is probably to write a serialized [Pandas](https://pandas.pydata.org/) dataframe and write some code to process it.
 
 ## Possible improvements
 
@@ -154,7 +154,7 @@ Here is a comparison table for both projects (please submit corrections if you t
 | Extracts useful information from tx metadata |✔️|❌|
 | Decimal arithmetic for absolute precision |✔️|❌|
 | .xlsx output |❌[^3]|✔️|
-| Serialized pandas dataframe output |✔️|❌|
+| [Pandas](https://pandas.pydata.org/) compatible |✔️|❌|
 | Ready to use after one-liner install command |✔️|❌|
 | Code is [Mypy](https://mypy-lang.org/) clean |✔️|❌|
 | Lines of Python code in repo (2023-09-01)| 529 | 1011|
