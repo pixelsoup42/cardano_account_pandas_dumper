@@ -14,6 +14,7 @@ class AccountData:
 
     LOVELACE_ASSET = "lovelace"
     LOVELACE_DECIMALS = 6
+    REWARD_PREFIX = "_REWARD_"  # Fake tx hash for rewards starts with this.
 
     def __init__(
         self,
@@ -51,39 +52,45 @@ class AccountData:
                     t.tx_hash
                     for t in sorted(
                         itertools.chain(
-                            *[
-                                api.address_transactions(
-                                    a,
-                                    to_block=self.to_block,
-                                    gather_pages=True,
-                                )
-                                for a in self.own_addresses
-                            ],
+                            *(
+                                [
+                                    api.address_transactions(
+                                        a,
+                                        to_block=self.to_block,
+                                        gather_pages=True,
+                                    )
+                                    for a in self.own_addresses
+                                ]
+                                + [self._reward_transactions(api=api)]
+                            ),
                         ),
-                        key=lambda x: (x.block_height, x.tx_index),
+                        key=lambda x: (x.block_time, x.tx_index),
                     )
                 ],
             )
         )
 
-    @staticmethod
     def _load_transaction_data(
-        api: BlockFrostApi, tx_hashes: List[str]
+        self, api: BlockFrostApi, tx_hashes: List[str]
     ) -> OrderedDict[str, Namespace]:
         result = OrderedDict()
         for tx_hash in tx_hashes:
-            transaction = api.transaction(tx_hash)
-            transaction.utxos = api.transaction_utxos(tx_hash)
-            transaction.metadata = api.transaction_metadata(tx_hash)
-            transaction.redeemers = (
-                api.transaction_redeemers(tx_hash) if transaction.redeemer_count else []
-            )
-            transaction.withdrawals = (
-                api.transaction_withdrawals(tx_hash)
-                if transaction.withdrawal_count
-                else []
-            )
-            result[tx_hash] = transaction
+            if not tx_hash.startswith(self.REWARD_PREFIX):
+                transaction = api.transaction(tx_hash)
+                transaction.utxos = api.transaction_utxos(tx_hash)
+                transaction.metadata = api.transaction_metadata(tx_hash)
+                transaction.redeemers = (
+                    api.transaction_redeemers(tx_hash)
+                    if transaction.redeemer_count
+                    else []
+                )
+                transaction.withdrawals = (
+                    api.transaction_withdrawals(tx_hash)
+                    if transaction.withdrawal_count
+                    else []
+                )
+                transaction.reward_amount = None
+                result[tx_hash] = transaction
         return result
 
     def _collect_from_transactions(self, api: BlockFrostApi) -> None:
@@ -93,17 +100,39 @@ class AccountData:
         self.addresses: Dict[str, Namespace] = {}
         all_addresses: Set[str] = set(self.own_addresses)
         for tx_obj in self.transactions.values():
-            all_asset_ids.update(
-                [a.unit for i in tx_obj.utxos.inputs for a in i.amount]
-                + [a.unit for i in tx_obj.utxos.outputs for a in i.amount]
-            )
-            all_addresses.update(
-                [i.address for i in tx_obj.utxos.inputs]
-                + [i.address for i in tx_obj.utxos.outputs]
-            )
+            if not tx_obj.reward_amount:
+                all_asset_ids.update(
+                    [a.unit for i in tx_obj.utxos.inputs for a in i.amount]
+                    + [a.unit for i in tx_obj.utxos.outputs for a in i.amount]
+                )
+                all_addresses.update(
+                    [i.address for i in tx_obj.utxos.inputs]
+                    + [i.address for i in tx_obj.utxos.outputs]
+                )
         all_asset_ids.remove(self.LOVELACE_ASSET)
         for asset in all_asset_ids:
             self.assets[asset] = api.asset(asset)
+
+    def _reward_transaction(self, api: BlockFrostApi, reward: Namespace) -> Namespace:
+        result = Namespace()
+        result.tx_hash = result.hash = self.REWARD_PREFIX + str(reward.epoch)
+        result.Metadata = Namespace()
+        result.Metadata.message = f"Reward: {reward.type}"
+        result.reward_amount = reward.amount
+        epoch = api.epoch(reward.epoch)
+        result.block_time = epoch.end_time
+        result.fees = "0"
+        result.deposit = "0"
+        result.tx_index = 0
+        result.redeemers = []
+        return result
+
+    def _reward_transactions(self, api: BlockFrostApi) -> List[Namespace]:
+        return [
+            self._reward_transaction(api=api, reward=r)
+            for s in self.staking_addresses
+            for r in api.account_rewards(s, gather_pages=True)
+        ]
 
 
 class AccountPandasDumper:
@@ -304,30 +333,33 @@ class AccountPandasDumper:
                     (" fees", int(transaction.fees), self.data.LOVELACE_DECIMALS),
                     ("deposit", int(transaction.deposit), self.data.LOVELACE_DECIMALS),
                     (
-                        "withdrawal_sum",
-                        sum(
+                        "rewards",
+                        -sum(
                             [int(w.amount) for w in transaction.withdrawals],
-                        ),
+                        )
+                        if not transaction.reward_amount
+                        else transaction.reward_amount,
                         self.data.LOVELACE_DECIMALS,
                     ),
                 ]
             ]
         )
         balance_result: Dict = defaultdict(lambda: Decimal(0))
+        if not transaction.reward_amount:
+            # Reward pseudo transactions have no utxos
+            for i in transaction.utxos.nonref_inputs:
+                if not i.collateral or not transaction.valid_contract:
+                    for amount in i.amount:
+                        key = self._utxo_amount_key(i, amount)
+                        if key is not None:
+                            balance_result[key] -= Decimal(amount.quantity)
 
-        for i in transaction.utxos.nonref_inputs:
-            if not i.collateral or not transaction.valid_contract:
-                for amount in i.amount:
-                    key = self._utxo_amount_key(i, amount)
+            for out in transaction.utxos.outputs:
+                for amount in out.amount:
+                    key = self._utxo_amount_key(out, amount)
                     if key is not None:
-                        balance_result[key] -= Decimal(amount.quantity)
-
-        for out in transaction.utxos.outputs:
-            for amount in out.amount:
-                key = self._utxo_amount_key(out, amount)
-                if key is not None:
-                    balance_result[key] += Decimal(amount.quantity)
-        result.update({k: v for k, v in balance_result.items() if v != 0})
+                        balance_result[key] += Decimal(amount.quantity)
+            result.update({k: v for k, v in balance_result.items() if v != 0})
         return result
 
     def make_transaction_array(self, to_block: int) -> pandas.DataFrame:
