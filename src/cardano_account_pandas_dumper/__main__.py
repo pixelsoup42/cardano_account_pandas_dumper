@@ -121,7 +121,7 @@ def main():
             parser.exit(
                 message=(
                     f"Specified to_block {args.to_block} for report, "
-                    + f"available data only to block {data_from_api.to_block}",
+                    + f"available data only to block {data_from_api.to_block}"
                 ),
                 status=1,
             )
