@@ -122,11 +122,10 @@ def main():
                 ),
                 status=1,
             )
-        if args.to_block is not None and args.to_block > data_from_api.to_block:
+        if args.to_block is not None:
             parser.exit(
                 message=(
-                    f"Specified to_block {args.to_block} for report, "
-                    + f"available data only to block {data_from_api.to_block}"
+                    "--to_block not allowed with --from_checkpoint (to_block always taken from checkpoint)."
                 ),
                 status=1,
             )
@@ -165,7 +164,7 @@ def main():
         raw_asset=args.raw_asset or False,
         rewards=data_from_api.rewards,
     )
-    dataframe = reporter.make_transaction_array(args.to_block or data_from_api.to_block)
+    dataframe = reporter.make_transaction_array()
     if args.pandas_output:
         try:
             dataframe.to_pickle(args.pandas_output)
@@ -180,7 +179,7 @@ def main():
 
     if args.csv_output:
         try:
-            dataframe.to_csv(args.csv_output, index=False)
+            dataframe.to_csv(args.csv_output, index=True)
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
     print("Done.")

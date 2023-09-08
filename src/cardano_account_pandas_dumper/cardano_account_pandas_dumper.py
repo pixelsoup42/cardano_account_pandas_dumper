@@ -1,10 +1,11 @@
 """ Cardano Account To Pandas Dumper."""
 import datetime
 import itertools
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 from decimal import Context, Decimal
-from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Set, Tuple
-import pandas
+from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Set, Tuple
+import pandas as pd
+import numpy as np
 from blockfrost import BlockFrostApi
 from blockfrost.utils import Namespace
 
@@ -14,25 +15,29 @@ class AccountData:
 
     LOVELACE_ASSET = "lovelace"
     LOVELACE_DECIMALS = 6
-    REWARD_PREFIX = "_REWARD_"  # Fake tx hash for rewards starts with this.
+    TRANSACTION_OFFSET = np.timedelta64(
+        1000, "ns"
+    )  # Time for a stransaction is block_time + index * TRANSACTION_OFFSET
 
     def __init__(
         self,
         api: BlockFrostApi,
         staking_addresses: FrozenSet[str],
         to_block: Optional[int],
+        rewards: bool,
     ) -> None:
         self.staking_addresses = staking_addresses
         if to_block is None:
             to_block = int(api.block_latest().height)
         self.to_block = to_block
-        self.own_addresses = self._load_own_addresses(api)
-        self.transactions = self._load_transaction_data(
-            api, self._load_transaction_hashes(api)
-        )
-        self._collect_from_transactions(api)
+        self.own_addresses: FrozenSet[str] = self._own_addresses(api)
+        self.rewards = rewards
+        if self.rewards:
+            self.reward_transactions: pd.Series = self._reward_transactions(api)
+        self.transactions: pd.Series = self._transaction_data(api)
+        self.assets: pd.Series = self._assets_from_transactions(api)
 
-    def _load_own_addresses(self, api: BlockFrostApi) -> FrozenSet[str]:
+    def _own_addresses(self, api: BlockFrostApi) -> FrozenSet[str]:
         return frozenset(
             [
                 a.address
@@ -45,94 +50,93 @@ class AccountData:
             ]
         )
 
-    def _load_transaction_hashes(self, api: BlockFrostApi) -> List[str]:
-        return list(
-            OrderedDict.fromkeys(
-                [
-                    t.tx_hash
-                    for t in sorted(
-                        itertools.chain(
-                            *(
-                                [
-                                    api.address_transactions(
-                                        a,
-                                        to_block=self.to_block,
-                                        gather_pages=True,
-                                    )
-                                    for a in self.own_addresses
-                                ]
-                                + [self._reward_transactions(api=api)]
-                            ),
-                        ),
-                        key=lambda x: (x.block_time, x.tx_index),
-                    )
-                ],
-            )
-        )
-
-    def _load_transaction_data(
-        self, api: BlockFrostApi, tx_hashes: List[str]
-    ) -> OrderedDict[str, Namespace]:
-        result = OrderedDict()
-        for tx_hash in tx_hashes:
-            if not tx_hash.startswith(self.REWARD_PREFIX):
-                transaction = api.transaction(tx_hash)
-                transaction.utxos = api.transaction_utxos(tx_hash)
-                transaction.metadata = api.transaction_metadata(tx_hash)
+    def _transaction_data(
+        self,
+        api: BlockFrostApi,
+    ) -> pd.Series:
+        result_list = []
+        for addr in self.own_addresses:
+            for outer_tx in api.address_transactions(
+                addr,
+                to_block=self.to_block,
+                gather_pages=True,
+            ):
+                transaction = api.transaction(outer_tx.tx_hash)
+                transaction.utxos = api.transaction_utxos(outer_tx.tx_hash)
+                transaction.utxos.nonref_inputs = [
+                    i for i in transaction.utxos.inputs if not i.reference
+                ]
+                transaction.metadata = api.transaction_metadata(outer_tx.tx_hash)
                 transaction.redeemers = (
-                    api.transaction_redeemers(tx_hash)
+                    api.transaction_redeemers(outer_tx.tx_hash)
                     if transaction.redeemer_count
                     else []
                 )
                 transaction.withdrawals = (
-                    api.transaction_withdrawals(tx_hash)
+                    api.transaction_withdrawals(outer_tx.tx_hash)
                     if transaction.withdrawal_count
                     else []
                 )
                 transaction.reward_amount = None
-                result[tx_hash] = transaction
-        return result
 
-    def _collect_from_transactions(self, api: BlockFrostApi) -> None:
-        self.assets: Dict[str, Namespace] = {}
+                result_list.append(transaction)
+        index = pd.DatetimeIndex(
+            [
+                np.datetime64(datetime.datetime.fromtimestamp(t.block_time))
+                + (int(t.index) * self.TRANSACTION_OFFSET)
+                for t in result_list
+            ],
+        )
+        return pd.Series(name="Transactions", data=result_list, index=index)
 
+    def _assets_from_transactions(self, api: BlockFrostApi) -> pd.Series:
         all_asset_ids: Set[str] = set()
-        self.addresses: Dict[str, Namespace] = {}
-        all_addresses: Set[str] = set(self.own_addresses)
-        for tx_obj in self.transactions.values():
-            if not tx_obj.reward_amount:
+        for tx_obj in self.transactions:
+            if hasattr(tx_obj, "utxos"):
                 all_asset_ids.update(
                     [a.unit for i in tx_obj.utxos.inputs for a in i.amount]
                     + [a.unit for i in tx_obj.utxos.outputs for a in i.amount]
                 )
-                all_addresses.update(
-                    [i.address for i in tx_obj.utxos.inputs]
-                    + [i.address for i in tx_obj.utxos.outputs]
-                )
-        all_asset_ids.remove(self.LOVELACE_ASSET)
-        for asset in all_asset_ids:
-            self.assets[asset] = api.asset(asset)
+        all_asset_ids.remove(AccountData.LOVELACE_ASSET)
+        return pd.Series(
+            name="Assets", data={asset: api.asset(asset) for asset in all_asset_ids}
+        )
 
-    def _reward_transaction(self, api: BlockFrostApi, reward: Namespace) -> Namespace:
+    @staticmethod
+    def _reward_transaction(api: BlockFrostApi, reward: Namespace) -> Namespace:
         result = Namespace()
-        result.tx_hash = result.hash = self.REWARD_PREFIX + str(reward.epoch)
+        result.tx_hash = None
         result.Metadata = Namespace()
-        result.Metadata.message = f"Reward: {reward.type}"
+        result.Metadata.message = f"Reward: {reward.type} - {reward.epoch}"
         result.reward_amount = reward.amount
-        epoch = api.epoch(reward.epoch)
-        result.block_time = epoch.end_time
+        epoch = api.epoch(reward.epoch + 1)  # Time is right before start of next epoch.
+        result.block_time = epoch.start_time
+        result.index = -1
         result.fees = "0"
         result.deposit = "0"
-        result.tx_index = 0
         result.redeemers = []
+        result.hash = None
+        result.withdrawals = []
+        result.utxos = Namespace()
+        result.utxos.inputs = []
+        result.utxos.outputs = []
+        result.utxos.nonref_inputs = []
         return result
 
-    def _reward_transactions(self, api: BlockFrostApi) -> List[Namespace]:
-        return [
-            self._reward_transaction(api=api, reward=r)
-            for s in self.staking_addresses
-            for r in api.account_rewards(s, gather_pages=True)
+    def _reward_transactions(self, api: BlockFrostApi) -> pd.Series:
+        result_list = [
+            self._reward_transaction(api=api, reward=a_r)
+            for s_a in self.staking_addresses
+            for a_r in api.account_rewards(s_a, gather_pages=True)
         ]
+        index = pd.DatetimeIndex(
+            [
+                np.datetime64(datetime.datetime.fromtimestamp(t.block_time))
+                + (t.index * self.TRANSACTION_OFFSET)
+                for t in result_list
+            ],
+        )
+        return pd.Series(name="Rewards", data=result_list, index=index)
 
 
 class AccountPandasDumper:
@@ -153,6 +157,7 @@ class AccountPandasDumper:
         unmute: bool,
         truncate_length: Optional[int],
         raw_asset: bool,
+        rewards: bool,
     ):
         self.known_dict = known_dict
         self.data = data
@@ -160,11 +165,8 @@ class AccountPandasDumper:
         self.detail_level = detail_level
         self.unmute = unmute
         self.raw_asset = raw_asset
+        self.rewards = rewards
         self.decimal_context = Context()
-        for tx_obj in self.data.transactions.values():
-            tx_obj.utxos.nonref_inputs = [
-                i for i in tx_obj.utxos.inputs if not i.reference
-            ]
 
     def _format_asset(self, asset: str) -> Optional[str]:
         if asset == AccountData.LOVELACE_ASSET:
@@ -309,75 +311,67 @@ class AccountPandasDumper:
             else (asset, amount.unit, addr, self._decimals_for_asset(amount.unit))
         )
 
-    def transaction_dict(self, transaction: Namespace) -> Optional[Dict]:
+    def transaction_dict(self) -> Iterable[Dict]:
         """Return a dict holding a Pandas row for transaction tx"""
-        result: Dict = OrderedDict(
-            [
-                (
-                    ("  metadata", k, d)
-                    if not self.raw_asset
-                    else ("  metadata", k, "", d),
-                    v,
-                )
-                for k, v, d in [
+        result_list = []
+        for transaction in self.data.transactions:
+            result: Dict = dict(
+                [
                     (
-                        "  block_time",
-                        # Make sure time monotonically increases by adding tx index to block time
-                        datetime.datetime.fromtimestamp(
-                            int(transaction.block_time) + int(transaction.index)
+                        ("  metadata", k, d)
+                        if not self.raw_asset
+                        else ("  metadata", k, "", d),
+                        v,
+                    )
+                    for k, v, d in [
+                        ("  hash", transaction.hash, 0),
+                        ("  message", self._format_message(transaction), 0),
+                        (" fees", int(transaction.fees), self.data.LOVELACE_DECIMALS),
+                        (
+                            "deposit",
+                            int(transaction.deposit),
+                            self.data.LOVELACE_DECIMALS,
                         ),
-                        0,
-                    ),
-                    ("  hash", transaction.hash, 0),
-                    ("  message", self._format_message(transaction), 0),
-                    (" fees", int(transaction.fees), self.data.LOVELACE_DECIMALS),
-                    ("deposit", int(transaction.deposit), self.data.LOVELACE_DECIMALS),
-                    (
-                        "rewards",
-                        -sum(
-                            [int(w.amount) for w in transaction.withdrawals],
-                        )
-                        if not transaction.reward_amount
-                        else transaction.reward_amount,
-                        self.data.LOVELACE_DECIMALS,
-                    ),
+                        (
+                            "rewards",
+                            -sum(
+                                [int(w.amount) for w in transaction.withdrawals],
+                            )
+                            if not transaction.reward_amount
+                            else transaction.reward_amount,
+                            self.data.LOVELACE_DECIMALS,
+                        ),
+                    ]
                 ]
-            ]
-        )
-        balance_result: Dict = defaultdict(lambda: Decimal(0))
-        if not transaction.reward_amount:
-            # Reward pseudo transactions have no utxos
-            for i in transaction.utxos.nonref_inputs:
-                if not i.collateral or not transaction.valid_contract:
-                    for amount in i.amount:
-                        key = self._utxo_amount_key(i, amount)
+            )
+            balance_result: Dict = defaultdict(lambda: Decimal(0))
+            if not transaction.reward_amount:
+                # Reward pseudo transactions have no utxos
+                for i in transaction.utxos.nonref_inputs:
+                    if not i.collateral or not transaction.valid_contract:
+                        for amount in i.amount:
+                            key = self._utxo_amount_key(i, amount)
+                            if key is not None:
+                                balance_result[key] -= Decimal(amount.quantity)
+
+                for out in transaction.utxos.outputs:
+                    for amount in out.amount:
+                        key = self._utxo_amount_key(out, amount)
                         if key is not None:
-                            balance_result[key] -= Decimal(amount.quantity)
+                            balance_result[key] += Decimal(amount.quantity)
+                result.update({k: v for k, v in balance_result.items() if v != 0})
+            result_list.append(result)
+        return result_list
 
-            for out in transaction.utxos.outputs:
-                for amount in out.amount:
-                    key = self._utxo_amount_key(out, amount)
-                    if key is not None:
-                        balance_result[key] += Decimal(amount.quantity)
-            result.update({k: v for k, v in balance_result.items() if v != 0})
-        return result
-
-    def make_transaction_array(self, to_block: int) -> pandas.DataFrame:
+    def make_transaction_array(self) -> pd.DataFrame:
         """Return a dataframe with each transaction until the specified block, included."""
-        data = []
-        for transaction in self.data.transactions.values():
-            if to_block is not None and int(transaction.block_height) > to_block:
-                break
-            data.append(self.transaction_dict(transaction))
-        frame = pandas.DataFrame(
-            data=data,
-        )
+        frame = pd.DataFrame(data=self.transaction_dict())
 
         # Scale according to decimal index row, and drop that row
         for col in frame.columns:
             if col[-1]:
                 scale = self.decimal_context.power(10, -Decimal(col[-1]))
                 frame[col] *= scale  # type: ignore
-        frame.columns = pandas.MultiIndex.from_tuples([c[:-1] for c in frame.columns])
+        frame.columns = pd.MultiIndex.from_tuples([c[:-1] for c in frame.columns])
         frame.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         return frame
