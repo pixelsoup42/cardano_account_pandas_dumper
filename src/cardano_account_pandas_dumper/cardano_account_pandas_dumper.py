@@ -3,7 +3,18 @@ import datetime
 import itertools
 from collections import defaultdict
 from decimal import Context, Decimal
-from typing import Any, Dict, FrozenSet, Iterable, List, Mapping, Optional, Set, Tuple
+from typing import (
+    Any,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    OrderedDict,
+    Set,
+    Tuple,
+)
 import pandas as pd
 import numpy as np
 from blockfrost import BlockFrostApi
@@ -300,70 +311,69 @@ class AccountPandasDumper:
     def _utxo_amount_key(self, utxo: Namespace, amount: Namespace) -> Optional[Tuple]:
         if self.detail_level < 2 and utxo.address not in self.data.own_addresses:
             return None
-        asset = self._format_asset(amount.unit)
-        if asset is None:
-            return None
-        addr = self._format_address(utxo.address)
+        return (amount.unit, utxo.address)
 
-        return (
-            (asset, addr, self._decimals_for_asset(amount.unit))
-            if not self.raw_asset
-            else (asset, amount.unit, addr, self._decimals_for_asset(amount.unit))
-        )
-
-    def transaction_dict(self) -> Iterable[Dict]:
+    def transaction_metadata(self, transaction: Namespace) -> dict:
         """Return a dict holding a Pandas row for transaction tx"""
-        result_list = []
-        for transaction in self.data.transactions:
-            result: Dict = dict(
-                [
+        result: Dict = OrderedDict(
+            [
+                (
+                    ("  metadata", k, d)
+                    if not self.raw_asset
+                    else ("  metadata", k, "", d),
+                    v,
+                )
+                for k, v, d in [
+                    ("  hash", transaction.hash, 0),
+                    ("  message", self._format_message(transaction), 0),
+                    (" fees", int(transaction.fees), self.data.LOVELACE_DECIMALS),
                     (
-                        ("  metadata", k, d)
-                        if not self.raw_asset
-                        else ("  metadata", k, "", d),
-                        v,
-                    )
-                    for k, v, d in [
-                        ("  hash", transaction.hash, 0),
-                        ("  message", self._format_message(transaction), 0),
-                        (" fees", int(transaction.fees), self.data.LOVELACE_DECIMALS),
-                        (
-                            "deposit",
-                            int(transaction.deposit),
-                            self.data.LOVELACE_DECIMALS,
-                        ),
-                        (
-                            "rewards",
-                            -sum(
-                                [int(w.amount) for w in transaction.withdrawals],
-                            )
-                            if not transaction.reward_amount
-                            else transaction.reward_amount,
-                            self.data.LOVELACE_DECIMALS,
-                        ),
-                    ]
+                        "deposit",
+                        int(transaction.deposit),
+                        self.data.LOVELACE_DECIMALS,
+                    ),
+                    (
+                        "rewards",
+                        -sum(
+                            [int(w.amount) for w in transaction.withdrawals],
+                        )
+                        if not transaction.reward_amount
+                        else transaction.reward_amount,
+                        self.data.LOVELACE_DECIMALS,
+                    ),
                 ]
-            )
-            balance_result: Dict = defaultdict(lambda: Decimal(0))
-                for i in transaction.utxos.nonref_inputs:
-                    if not i.collateral or not transaction.valid_contract:
-                        for amount in i.amount:
-                            key = self._utxo_amount_key(i, amount)
-                            if key is not None:
-                                balance_result[key] -= Decimal(amount.quantity)
+            ]
+        )
+        return result
 
-                for out in transaction.utxos.outputs:
-                    for amount in out.amount:
-                        key = self._utxo_amount_key(out, amount)
-                        if key is not None:
-                            balance_result[key] += Decimal(amount.quantity)
-                result.update({k: v for k, v in balance_result.items() if v != 0})
-            result_list.append(result)
-        return result_list
+    def transaction_outputs(self, transaction: Namespace) -> dict:
+        result = {}
+        balance_result: Dict = OrderedDict()
+        for i in transaction.utxos.nonref_inputs:
+            if not i.collateral or not transaction.valid_contract:
+                for amount in i.amount:
+                    key = self._utxo_amount_key(i, amount)
+                    if key is not None:
+                        if key not in balance_result:
+                            balance_result[key] = Decimal(0)
+                        balance_result[key] -= Decimal(amount.quantity)
+
+        for out in transaction.utxos.outputs:
+            for amount in out.amount:
+                key = self._utxo_amount_key(out, amount)
+                if key is not None:
+                    if key not in balance_result:
+                        balance_result[key] = Decimal(0)
+                    balance_result[key] += Decimal(amount.quantity)
+        result.update({k: v for k, v in balance_result.items() if v != 0})
+        return result
 
     def make_transaction_array(self) -> pd.DataFrame:
         """Return a dataframe with each transaction until the specified block, included."""
-        frame = pd.DataFrame(data=self.transaction_dict())
+
+        metadata = self.data.transactions.map(self.transaction_metadata)
+        outputs = self.data.transactions.map(self.transaction_outputs)
+        frame = pd.DataFrame(data=[metadata, outputs])
 
         # Scale according to decimal index row, and drop that row
         for col in frame.columns:
