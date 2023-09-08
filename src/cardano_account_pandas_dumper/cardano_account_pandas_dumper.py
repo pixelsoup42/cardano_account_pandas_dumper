@@ -345,8 +345,6 @@ class AccountPandasDumper:
                 ]
             )
             balance_result: Dict = defaultdict(lambda: Decimal(0))
-            if not transaction.reward_amount:
-                # Reward pseudo transactions have no utxos
                 for i in transaction.utxos.nonref_inputs:
                     if not i.collateral or not transaction.valid_contract:
                         for amount in i.amount:
