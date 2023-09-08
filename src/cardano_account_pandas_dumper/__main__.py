@@ -125,7 +125,7 @@ def main():
         if args.to_block is not None:
             parser.exit(
                 message=(
-                    "--to_block not allowed with --from_checkpoint (to_block always taken from checkpoint)."
+                    "--to_block not allowed with --from_checkpoint (always taken from checkpoint)."
                 ),
                 status=1,
             )
