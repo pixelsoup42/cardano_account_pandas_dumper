@@ -86,6 +86,11 @@ def _create_arg_parser():
         help="Add header row with concatenation of policy_id and hex-encoded asset_name.",
         action="store_true",
     )
+    result.add_argument(
+        "--no_rewards",
+        help="Do not add reward transactions.",
+        action="store_true",
+    )
     return result
 
 
@@ -132,6 +137,7 @@ def main():
                 api=api_instance,
                 staking_addresses=staking_addresses_set,
                 to_block=args.to_block,
+                rewards=not args.no_rewards,
             )
         except (ApiError, JSONDecodeError, OSError) as exception:
             parser.exit(
@@ -157,6 +163,7 @@ def main():
         unmute=args.unmute,
         truncate_length=None if args.no_truncate else args.truncate_length,
         raw_asset=args.raw_asset or False,
+        rewards=data_from_api.rewards,
     )
     dataframe = reporter.make_transaction_array(args.to_block or data_from_api.to_block)
     if args.pandas_output:
