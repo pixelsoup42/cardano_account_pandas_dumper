@@ -1,5 +1,6 @@
 """ Cardano Account To Pandas Dumper."""
 import datetime
+import functools
 import itertools
 from collections import defaultdict
 from decimal import Context, Decimal
@@ -7,13 +8,11 @@ from typing import (
     Any,
     Dict,
     FrozenSet,
-    Iterable,
     List,
     Mapping,
     Optional,
     OrderedDict,
     Set,
-    Tuple,
 )
 import pandas as pd
 import numpy as np
@@ -308,78 +307,69 @@ class AccountPandasDumper:
             return self.data.assets[asset].metadata.decimals
         return 0
 
-    def _utxo_amount_key(self, utxo: Namespace, amount: Namespace) -> Optional[Tuple]:
-        if self.detail_level < 2 and utxo.address not in self.data.own_addresses:
-            return None
-        return (amount.unit, utxo.address)
-
-    def transaction_metadata(self, transaction: Namespace) -> dict:
+    def _transaction_metadata(self, transaction: Namespace) -> Any:
         """Return a dict holding a Pandas row for transaction tx"""
         result: Dict = OrderedDict(
-            [
-                (
-                    ("  metadata", k, d)
-                    if not self.raw_asset
-                    else ("  metadata", k, "", d),
-                    v,
-                )
-                for k, v, d in [
-                    ("  hash", transaction.hash, 0),
-                    ("  message", self._format_message(transaction), 0),
-                    (" fees", int(transaction.fees), self.data.LOVELACE_DECIMALS),
-                    (
-                        "deposit",
-                        int(transaction.deposit),
-                        self.data.LOVELACE_DECIMALS,
-                    ),
-                    (
-                        "rewards",
-                        -sum(
-                            [int(w.amount) for w in transaction.withdrawals],
-                        )
-                        if not transaction.reward_amount
-                        else transaction.reward_amount,
-                        self.data.LOVELACE_DECIMALS,
-                    ),
-                ]
-            ]
+            {
+                "hash": transaction.hash,
+                "message": self._format_message(transaction),
+            }
         )
-        return result
+        return pd.DataFrame([result])
 
-    def transaction_outputs(self, transaction: Namespace) -> dict:
-        result = {}
+    def _transaction_outputs(self, transaction: Namespace) -> Any:
+        result = OrderedDict()
+        result[(self.data.LOVELACE_ASSET, "fees")] = Decimal(transaction.fees)
+        result[(self.data.LOVELACE_ASSET, "deposit")] = Decimal(transaction.deposit)
+        result[(self.data.LOVELACE_ASSET, "rewards")] = (
+            self.decimal_context.minus(
+                functools.reduce(
+                    self.decimal_context.add,
+                    [Decimal(w.amount) for w in transaction.withdrawals],
+                    Decimal(0),
+                )
+            )
+            if not transaction.reward_amount
+            else Decimal(transaction.reward_amount)
+        )
         balance_result: Dict = OrderedDict()
-        for i in transaction.utxos.nonref_inputs:
-            if not i.collateral or not transaction.valid_contract:
-                for amount in i.amount:
-                    key = self._utxo_amount_key(i, amount)
-                    if key is not None:
-                        if key not in balance_result:
-                            balance_result[key] = Decimal(0)
-                        balance_result[key] -= Decimal(amount.quantity)
-
-        for out in transaction.utxos.outputs:
-            for amount in out.amount:
-                key = self._utxo_amount_key(out, amount)
-                if key is not None:
+        for utxo in transaction.utxos.nonref_inputs:
+            if not utxo.collateral or not transaction.valid_contract:
+                for amount in utxo.amount:
+                    key = (amount.unit, utxo.address)
                     if key not in balance_result:
                         balance_result[key] = Decimal(0)
-                    balance_result[key] += Decimal(amount.quantity)
+                    balance_result[key] -= Decimal(amount.quantity)
+
+        for utxo in transaction.utxos.outputs:
+            for amount in utxo.amount:
+                key = (amount.unit, utxo.address)
+                if key not in balance_result:
+                    balance_result[key] = Decimal(0)
+                balance_result[key] += Decimal(amount.quantity)
         result.update({k: v for k, v in balance_result.items() if v != 0})
-        return result
+        return pd.DataFrame([result])
 
     def make_transaction_array(self) -> pd.DataFrame:
         """Return a dataframe with each transaction until the specified block, included."""
+        metadata = pd.DataFrame(
+            self.data.transactions.map(self._transaction_metadata).rename("metadata")
+        )
+        outputs = pd.DataFrame(
+            self.data.transactions.map(self._transaction_outputs).rename("balance")
+        )
+        # Add total line at the bottom
+        # total = []
+        # for column in outputs.columns:
+        #     # Only NaN is float in the column
+        #     total.append(
+        #         functools.reduce(
+        #             self.decimal_context.add,
+        #             [a for a in outputs[column] if type(a) is type(Decimal(0))],
+        #             Decimal(0),
+        #         )
+        #     )
+        # outputs.loc["Total"] = total
+        frame = pd.DataFrame(metadata).join(outputs, how="outer")
 
-        metadata = self.data.transactions.map(self.transaction_metadata)
-        outputs = self.data.transactions.map(self.transaction_outputs)
-        frame = pd.DataFrame(data=[metadata, outputs])
-
-        # Scale according to decimal index row, and drop that row
-        for col in frame.columns:
-            if col[-1]:
-                scale = self.decimal_context.power(10, -Decimal(col[-1]))
-                frame[col] *= scale  # type: ignore
-        frame.columns = pd.MultiIndex.from_tuples([c[:-1] for c in frame.columns])
-        frame.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         return frame

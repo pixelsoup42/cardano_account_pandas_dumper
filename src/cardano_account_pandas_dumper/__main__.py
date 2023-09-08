@@ -170,13 +170,6 @@ def main():
             dataframe.to_pickle(args.pandas_output)
         except (pickle.PicklingError, OSError) as exception:
             warnings.warn(f"Failed to write pandas file: {exception}")
-    # Add total line at the bottom for csv output.
-    total = ["", "Total", ""]
-    for column in dataframe.columns[3:]:
-        # Only NaN is float in the column
-        total.append(sum([a for a in dataframe[column] if not isinstance(a, float)]))
-    dataframe.loc["Total"] = total
-
     if args.csv_output:
         try:
             dataframe.to_csv(args.csv_output, index=True)
