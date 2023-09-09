@@ -122,10 +122,10 @@ def main():
                 ),
                 status=1,
             )
-        if args.to_block is not None:
+        if args.to_block is not None and args.to_block != data_from_api.to_block:
             parser.exit(
                 message=(
-                    "--to_block not allowed with --from_checkpoint (always taken from checkpoint)."
+                    f"--to_block {args.to_block} different from checkpoint's {data_from_api.to_block}."
                 ),
                 status=1,
             )
