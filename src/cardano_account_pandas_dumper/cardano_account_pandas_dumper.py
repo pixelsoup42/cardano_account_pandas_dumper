@@ -101,11 +101,20 @@ class AccountData:
         )
 
     @staticmethod
-    def _reward_transaction(api: BlockFrostApi, reward: Namespace) -> Namespace:
+    def _reward_transaction(
+        api: BlockFrostApi, reward: Namespace, pools: Mapping[str, Namespace]
+    ) -> Namespace:
         result = Namespace()
         result.tx_hash = None
-        result.metadata = Namespace()
-        result.metadata.message = f"Reward: {reward.type} - {reward.epoch}"
+        pool_name = (
+            pools[reward.pool_id].name if reward.pool_id in pools else reward.pool_id
+        )
+        result.metadata = [
+            Namespace(
+                label="674",
+                json_metadata=f"Reward: {reward.type} - {pool_name} - {reward.epoch}",
+            )
+        ]
         result.reward_amount = reward.amount
         epoch = api.epoch(reward.epoch + 1)  # Time is right before start of next epoch.
         result.block_time = epoch.start_time
@@ -122,12 +131,21 @@ class AccountData:
         return result
 
     def _reward_transactions(self, api: BlockFrostApi) -> pd.Series:
-        result_list = [
-            self._reward_transaction(api=api, reward=a_r)
+        reward_list = [
+            a_r
             for s_a in self.staking_addresses
             for a_r in api.account_rewards(s_a, gather_pages=True)
         ]
-        return pd.Series(name="Rewards", data=result_list)
+
+        pool_result_list = {
+            pool: api.pool_metadata(pool)
+            for pool in frozenset([r.pool_id for r in reward_list])
+        }
+        reward_result_list = [
+            self._reward_transaction(api=api, reward=a_r, pools=pool_result_list)
+            for a_r in reward_list
+        ]
+        return pd.Series(name="Rewards", data=reward_result_list)
 
 
 class AccountPandasDumper:
@@ -327,9 +345,11 @@ class AccountPandasDumper:
         tx_hash = pd.DataFrame(
             data=[
                 x.hash
-                for x in itertools.chain(
-                    self.data.transactions,
-                    self.data.reward_transactions if self.rewards else pd.Series(),
+                for x in pd.concat(
+                    objs=[
+                        self.data.transactions,
+                        self.data.reward_transactions if self.rewards else pd.Series(),
+                    ]
                 )
             ],
             columns=["hash"],
@@ -342,9 +362,11 @@ class AccountPandasDumper:
             data=[
                 np.datetime64(datetime.datetime.fromtimestamp(x.block_time))
                 + (int(x.index) * self.TRANSACTION_OFFSET)
-                for x in itertools.chain(
-                    self.data.transactions,
-                    self.data.reward_transactions if self.rewards else pd.Series(),
+                for x in pd.concat(
+                    objs=[
+                        self.data.transactions,
+                        self.data.reward_transactions if self.rewards else pd.Series(),
+                    ],
                 )
             ],
             columns=["timestamp"],
@@ -358,9 +380,11 @@ class AccountPandasDumper:
         message = pd.DataFrame(
             data=[
                 self._format_message(x)
-                for x in itertools.chain(
-                    self.data.transactions,
-                    self.data.reward_transactions if self.rewards else pd.Series(),
+                for x in pd.concat(
+                    objs=[
+                        self.data.transactions,
+                        self.data.reward_transactions if self.rewards else pd.Series(),
+                    ],
                 )
             ],
             columns=["message"],
@@ -372,9 +396,11 @@ class AccountPandasDumper:
         balance = pd.DataFrame(
             data=[
                 self._transaction_balance(x)
-                for x in itertools.chain(
-                    self.data.transactions,
-                    self.data.reward_transactions if self.rewards else pd.Series(),
+                for x in pd.concat(
+                    objs=[
+                        self.data.transactions,
+                        self.data.reward_transactions if self.rewards else pd.Series(),
+                    ],
                 )
             ],
         )
@@ -383,6 +409,8 @@ class AccountPandasDumper:
         return balance
 
     def make_transaction_frame(self) -> pd.DataFrame:
+        """Build a transaction spreadsheet."""
+
         # Add total line at the bottom
         # total = []
         # for column in outputs.columns:
