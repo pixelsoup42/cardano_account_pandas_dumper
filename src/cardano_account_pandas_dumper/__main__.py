@@ -164,7 +164,7 @@ def main():
         raw_asset=args.raw_asset or False,
         rewards=data_from_api.rewards,
     )
-    dataframe = reporter.make_transaction_array()
+    dataframe = reporter.make_transaction_frame()
     if args.pandas_output:
         try:
             dataframe.to_pickle(args.pandas_output)

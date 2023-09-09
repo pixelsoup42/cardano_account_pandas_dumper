@@ -10,7 +10,6 @@ from typing import (
     List,
     Mapping,
     Optional,
-    OrderedDict,
     Set,
 )
 import pandas as pd
@@ -24,9 +23,6 @@ class AccountData:
 
     LOVELACE_ASSET = "lovelace"
     LOVELACE_DECIMALS = 6
-    TRANSACTION_OFFSET = np.timedelta64(
-        1000, "ns"
-    )  # Time for a stransaction is block_time + index * TRANSACTION_OFFSET
 
     def __init__(
         self,
@@ -89,14 +85,7 @@ class AccountData:
                 transaction.reward_amount = None
 
                 result_list.append(transaction)
-        index = pd.DatetimeIndex(
-            [
-                np.datetime64(datetime.datetime.fromtimestamp(t.block_time))
-                + (int(t.index) * self.TRANSACTION_OFFSET)
-                for t in result_list
-            ],
-        )
-        return pd.Series(name="Transactions", data=result_list, index=index)
+        return pd.Series(name="Transactions", data=result_list)
 
     def _assets_from_transactions(self, api: BlockFrostApi) -> pd.Series:
         all_asset_ids: Set[str] = set()
@@ -138,14 +127,7 @@ class AccountData:
             for s_a in self.staking_addresses
             for a_r in api.account_rewards(s_a, gather_pages=True)
         ]
-        index = pd.DatetimeIndex(
-            [
-                np.datetime64(datetime.datetime.fromtimestamp(t.block_time))
-                + (t.index * self.TRANSACTION_OFFSET)
-                for t in result_list
-            ],
-        )
-        return pd.Series(name="Rewards", data=result_list, index=index)
+        return pd.Series(name="Rewards", data=result_list)
 
 
 class AccountPandasDumper:
@@ -157,6 +139,9 @@ class AccountPandasDumper:
     SCRIPTS_KEY = "scripts"
     LABELS_KEY = "labels"
     ASSETS_KEY = "assets"
+    TRANSACTION_OFFSET = np.timedelta64(
+        1000, "ns"
+    )  # Time for a stransaction is block_time + index * TRANSACTION_OFFSET
 
     def __init__(
         self,
@@ -320,7 +305,7 @@ class AccountPandasDumper:
             if not transaction.reward_amount
             else np.longlong(transaction.reward_amount)
         )
-        balance_result: Dict = OrderedDict()
+        balance_result: Dict = {}
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
@@ -335,19 +320,48 @@ class AccountPandasDumper:
                 if key not in balance_result:
                     balance_result[key] = np.longlong(0)
                 balance_result[key] += np.longlong(amount.quantity)
-        result.update({k: v for k, v in balance_result.items() if v != 0})
+        result.update({k: v for k, v in balance_result.items() if v != np.longlong(0)})
         return result
 
-    def make_transaction_array(self) -> pd.DataFrame:
-        """Return a dataframe with each transaction until the specified block, included."""
-        tx_hash = self.data.transactions.rename("tx_hash").map(lambda x: x.hash)
-        message = self.data.transactions.rename("message").map(self._format_message)
-        balance_objects = [self._transaction_balance(x) for x in self.data.transactions]
-        balance = pd.Series(
-            name="balance", data=balance_objects, index=self.data.transactions.index
+    def _make_hash_frame(self) -> pd.DataFrame:
+        tx_hash = pd.DataFrame(
+            data=[x.hash for x in self.data.transactions],
+            columns=["hash"],
         )
-        # index = pd.MultiIndex.from_tuples(balance.columns)
+        tx_hash.columns = pd.MultiIndex.from_tuples([("", c) for c in tx_hash.columns])
+        return tx_hash
 
+    def _make_timestamp_frame(self) -> pd.DataFrame:
+        timestamp = pd.DataFrame(
+            data=[
+                np.datetime64(datetime.datetime.fromtimestamp(x.block_time))
+                + (int(x.index) * self.TRANSACTION_OFFSET)
+                for x in self.data.transactions
+            ],
+            columns=["timestamp"],
+        )
+        timestamp.columns = pd.MultiIndex.from_tuples(
+            [("", c) for c in timestamp.columns]
+        )
+        return timestamp
+
+    def _make_message_frame(self) -> pd.DataFrame:
+        message = pd.DataFrame(
+            data=[self._format_message(x) for x in self.data.transactions],
+            columns=["message"],
+        )
+        message.columns = pd.MultiIndex.from_tuples([("", c) for c in message.columns])
+        return message
+
+    def _make_balance_frame(self) -> pd.DataFrame:
+        balance = pd.DataFrame(
+            data=[self._transaction_balance(x) for x in self.data.transactions],
+        )
+        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+        return balance
+
+    def make_transaction_frame(self) -> pd.DataFrame:
         # Add total line at the bottom
         # total = []
         # for column in outputs.columns:
@@ -360,8 +374,27 @@ class AccountPandasDumper:
         #         )
         #     )
         # outputs.loc["Total"] = total
-        frame = (
-            pd.DataFrame(tx_hash).join(message, how="inner").join(balance, how="inner")
+        frame = pd.merge(
+            left=self._make_timestamp_frame(),
+            right=self._make_hash_frame(),
+            left_index=True,
+            right_index=True,
+            how="left",
         )
-
+        frame = pd.merge(
+            left=frame,
+            right=self._make_message_frame(),
+            left_index=True,
+            right_index=True,
+            how="left",
+        )
+        frame = pd.merge(
+            left=frame,
+            right=self._make_balance_frame(),
+            left_index=True,
+            right_index=True,
+            how="left",
+        )
+        frame.drop_duplicates(inplace=True)
+        frame.sort_values(by=("", "timestamp"), inplace=True)
         return frame
