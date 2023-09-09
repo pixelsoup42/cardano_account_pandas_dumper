@@ -446,4 +446,6 @@ class AccountPandasDumper:
         )
         frame.drop_duplicates(inplace=True)
         frame.sort_values(by=("", "timestamp"), inplace=True)
+        frame.reset_index(inplace=True)
+        frame.drop([("index", "")], axis=1, inplace=True)
         return frame
