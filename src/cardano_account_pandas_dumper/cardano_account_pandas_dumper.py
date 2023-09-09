@@ -3,7 +3,6 @@ import datetime
 import functools
 import itertools
 from collections import defaultdict
-from decimal import Context, Decimal
 from typing import (
     Any,
     Dict,
@@ -176,7 +175,6 @@ class AccountPandasDumper:
         self.unmute = unmute
         self.raw_asset = raw_asset
         self.rewards = rewards
-        self.decimal_context = Context()
 
     def _format_asset(self, asset: str) -> Optional[str]:
         if asset == AccountData.LOVELACE_ASSET:
@@ -307,30 +305,20 @@ class AccountPandasDumper:
             return self.data.assets[asset].metadata.decimals
         return 0
 
-    def _transaction_metadata(self, transaction: Namespace) -> Any:
-        """Return a dict holding a Pandas row for transaction tx"""
-        result: Dict = OrderedDict(
-            {
-                "hash": transaction.hash,
-                "message": self._format_message(transaction),
-            }
-        )
-        return pd.DataFrame([result])
-
-    def _transaction_outputs(self, transaction: Namespace) -> Any:
-        result = OrderedDict()
-        result[(self.data.LOVELACE_ASSET, "fees")] = Decimal(transaction.fees)
-        result[(self.data.LOVELACE_ASSET, "deposit")] = Decimal(transaction.deposit)
+    def _transaction_balance(self, transaction: Namespace) -> Any:
+        result = {}
+        result[(self.data.LOVELACE_ASSET, "fees")] = np.longlong(transaction.fees)
+        result[(self.data.LOVELACE_ASSET, "deposit")] = np.longlong(transaction.deposit)
         result[(self.data.LOVELACE_ASSET, "rewards")] = (
-            self.decimal_context.minus(
+            np.negative(
                 functools.reduce(
-                    self.decimal_context.add,
-                    [Decimal(w.amount) for w in transaction.withdrawals],
-                    Decimal(0),
+                    np.add,
+                    [np.longlong(w.amount) for w in transaction.withdrawals],
+                    np.longlong(0),
                 )
             )
             if not transaction.reward_amount
-            else Decimal(transaction.reward_amount)
+            else np.longlong(transaction.reward_amount)
         )
         balance_result: Dict = OrderedDict()
         for utxo in transaction.utxos.nonref_inputs:
@@ -338,38 +326,42 @@ class AccountPandasDumper:
                 for amount in utxo.amount:
                     key = (amount.unit, utxo.address)
                     if key not in balance_result:
-                        balance_result[key] = Decimal(0)
-                    balance_result[key] -= Decimal(amount.quantity)
+                        balance_result[key] = np.longlong(0)
+                    balance_result[key] -= np.longlong(amount.quantity)
 
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
                 key = (amount.unit, utxo.address)
                 if key not in balance_result:
-                    balance_result[key] = Decimal(0)
-                balance_result[key] += Decimal(amount.quantity)
+                    balance_result[key] = np.longlong(0)
+                balance_result[key] += np.longlong(amount.quantity)
         result.update({k: v for k, v in balance_result.items() if v != 0})
-        return pd.DataFrame([result])
+        return result
 
     def make_transaction_array(self) -> pd.DataFrame:
         """Return a dataframe with each transaction until the specified block, included."""
-        metadata = pd.DataFrame(
-            self.data.transactions.map(self._transaction_metadata).rename("metadata")
+        tx_hash = self.data.transactions.rename("tx_hash").map(lambda x: x.hash)
+        message = self.data.transactions.rename("message").map(self._format_message)
+        balance_objects = [self._transaction_balance(x) for x in self.data.transactions]
+        balance = pd.Series(
+            name="balance", data=balance_objects, index=self.data.transactions.index
         )
-        outputs = pd.DataFrame(
-            self.data.transactions.map(self._transaction_outputs).rename("balance")
-        )
+        # index = pd.MultiIndex.from_tuples(balance.columns)
+
         # Add total line at the bottom
         # total = []
         # for column in outputs.columns:
         #     # Only NaN is float in the column
         #     total.append(
         #         functools.reduce(
-        #             self.decimal_context.add,
-        #             [a for a in outputs[column] if type(a) is type(Decimal(0))],
-        #             Decimal(0),
+        #             self.np.longlong_context.add,
+        #             [a for a in outputs[column] if type(a) is type(np.longlong(0))],
+        #             np.longlong(0),
         #         )
         #     )
         # outputs.loc["Total"] = total
-        frame = pd.DataFrame(metadata).join(outputs, how="outer")
+        frame = (
+            pd.DataFrame(tx_hash).join(message, how="inner").join(balance, how="inner")
+        )
 
         return frame
