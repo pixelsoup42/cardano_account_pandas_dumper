@@ -104,8 +104,8 @@ class AccountData:
     def _reward_transaction(api: BlockFrostApi, reward: Namespace) -> Namespace:
         result = Namespace()
         result.tx_hash = None
-        result.Metadata = Namespace()
-        result.Metadata.message = f"Reward: {reward.type} - {reward.epoch}"
+        result.metadata = Namespace()
+        result.metadata.message = f"Reward: {reward.type} - {reward.epoch}"
         result.reward_amount = reward.amount
         epoch = api.epoch(reward.epoch + 1)  # Time is right before start of next epoch.
         result.block_time = epoch.start_time
@@ -325,7 +325,13 @@ class AccountPandasDumper:
 
     def _make_hash_frame(self) -> pd.DataFrame:
         tx_hash = pd.DataFrame(
-            data=[x.hash for x in self.data.transactions],
+            data=[
+                x.hash
+                for x in itertools.chain(
+                    self.data.transactions,
+                    self.data.reward_transactions if self.rewards else pd.Series(),
+                )
+            ],
             columns=["hash"],
         )
         tx_hash.columns = pd.MultiIndex.from_tuples([("", c) for c in tx_hash.columns])
@@ -336,7 +342,10 @@ class AccountPandasDumper:
             data=[
                 np.datetime64(datetime.datetime.fromtimestamp(x.block_time))
                 + (int(x.index) * self.TRANSACTION_OFFSET)
-                for x in self.data.transactions
+                for x in itertools.chain(
+                    self.data.transactions,
+                    self.data.reward_transactions if self.rewards else pd.Series(),
+                )
             ],
             columns=["timestamp"],
         )
@@ -347,7 +356,13 @@ class AccountPandasDumper:
 
     def _make_message_frame(self) -> pd.DataFrame:
         message = pd.DataFrame(
-            data=[self._format_message(x) for x in self.data.transactions],
+            data=[
+                self._format_message(x)
+                for x in itertools.chain(
+                    self.data.transactions,
+                    self.data.reward_transactions if self.rewards else pd.Series(),
+                )
+            ],
             columns=["message"],
         )
         message.columns = pd.MultiIndex.from_tuples([("", c) for c in message.columns])
@@ -355,7 +370,13 @@ class AccountPandasDumper:
 
     def _make_balance_frame(self) -> pd.DataFrame:
         balance = pd.DataFrame(
-            data=[self._transaction_balance(x) for x in self.data.transactions],
+            data=[
+                self._transaction_balance(x)
+                for x in itertools.chain(
+                    self.data.transactions,
+                    self.data.reward_transactions if self.rewards else pd.Series(),
+                )
+            ],
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
