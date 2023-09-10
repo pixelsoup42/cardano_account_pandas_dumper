@@ -155,6 +155,9 @@ class AccountData:
         return pd.Series(name="Rewards", data=reward_result_list)
 
 
+TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
+
+
 class AccountPandasDumper:
     """Hold logic to convert an instance of AccountData to a Pandas dataframe."""
 
@@ -164,9 +167,7 @@ class AccountPandasDumper:
     SCRIPTS_KEY = "scripts"
     LABELS_KEY = "labels"
     ASSETS_KEY = "assets"
-    TRANSACTION_OFFSET = np.timedelta64(
-        1000, "ns"
-    )  # Time for a stransaction is block_time + index * TRANSACTION_OFFSET
+    # Time for a stransaction is block_time + index * TRANSACTION_OFFSET
 
     def __init__(
         self,
@@ -316,12 +317,14 @@ class AccountPandasDumper:
         return 0
 
     def _transaction_balance(self, transaction: Namespace) -> Any:
-        result: MutableMapping[Tuple[str, str], np.longlong] = defaultdict(
+        result: MutableMapping[Tuple[str, str, bool], np.longlong] = defaultdict(
             lambda: np.longlong(0)
         )
-        result[(self.data.LOVELACE_ASSET, "fees")] = np.longlong(transaction.fees)
-        result[(self.data.LOVELACE_ASSET, "deposit")] = np.longlong(transaction.deposit)
-        result[(self.data.LOVELACE_ASSET, "rewards")] = (
+        result[(self.data.LOVELACE_ASSET, "fees", True)] = np.longlong(transaction.fees)
+        result[(self.data.LOVELACE_ASSET, "deposit", True)] = np.longlong(
+            transaction.deposit
+        )
+        result[(self.data.LOVELACE_ASSET, "rewards", True)] = (
             np.negative(
                 functools.reduce(
                     np.add,
@@ -335,81 +338,39 @@ class AccountPandasDumper:
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
-                    result[(amount.unit, utxo.address)] -= np.longlong(amount.quantity)
+                    result[
+                        (
+                            amount.unit,
+                            utxo.address,
+                            utxo.address in self.data.own_addresses,
+                        )
+                    ] -= np.longlong(amount.quantity)
 
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
-                result[(amount.unit, utxo.address)] += np.longlong(amount.quantity)
+                result[
+                    (
+                        amount.unit,
+                        utxo.address,
+                        utxo.address in self.data.own_addresses,
+                    )
+                ] += np.longlong(amount.quantity)
 
-        return dict([i for i in result.items() if i[1] != np.longlong(0)])
+        return result
 
-    def _make_hash_frame(self) -> pd.DataFrame:
-        tx_hash = pd.DataFrame(
-            data=[
-                x.hash
-                for x in pd.concat(
-                    objs=[
-                        self.data.transactions,
-                        self.data.reward_transactions if self.rewards else pd.Series(),
-                    ]
-                )
-            ],
-            columns=["hash"],
-        )
-        tx_hash.columns = pd.MultiIndex.from_tuples([("", c) for c in tx_hash.columns])
-        return tx_hash
-
-    def _make_timestamp_frame(self) -> pd.DataFrame:
-        timestamp = pd.DataFrame(
-            data=[
-                np.datetime64(datetime.datetime.fromtimestamp(x.block_time))
-                + (int(x.index) * self.TRANSACTION_OFFSET)
-                for x in pd.concat(
-                    objs=[
-                        self.data.transactions,
-                        self.data.reward_transactions if self.rewards else pd.Series(),
-                    ],
-                )
-            ],
-            columns=["timestamp"],
-        )
-        timestamp.columns = pd.MultiIndex.from_tuples(
-            [("", c) for c in timestamp.columns]
-        )
-        return timestamp
-
-    def _make_message_frame(self) -> pd.DataFrame:
-        message = pd.DataFrame(
-            data=[
-                self._format_message(x)
-                for x in pd.concat(
-                    objs=[
-                        self.data.transactions,
-                        self.data.reward_transactions if self.rewards else pd.Series(),
-                    ],
-                )
-            ],
-            columns=["message"],
-        )
-        message.columns = pd.MultiIndex.from_tuples([("", c) for c in message.columns])
-        return message
-
-    def _make_balance_frame(self) -> pd.DataFrame:
+    def _make_balance_frame(self, transactions: pd.Series) -> pd.DataFrame:
         balance = pd.DataFrame(
-            data=[
-                self._transaction_balance(x)
-                for x in pd.concat(
-                    objs=[
-                        self.data.transactions,
-                        self.data.reward_transactions if self.rewards else pd.Series(),
-                    ],
-                )
-            ],
+            data=[self._transaction_balance(x) for x in transactions],
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-
         return balance
+
+    @staticmethod
+    def _extract_timestamp(transaction: Namespace) -> Any:
+        return np.datetime64(
+            datetime.datetime.fromtimestamp(transaction.block_time)
+        ) + (int(transaction.index) * TRANSACTION_OFFSET)
 
     def make_transaction_frame(self) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
@@ -426,29 +387,39 @@ class AccountPandasDumper:
         #         )
         #     )
         # outputs.loc["Total"] = total
-        frame = pd.merge(
-            left=self._make_timestamp_frame(),
-            right=self._make_hash_frame(),
-            left_index=True,
-            right_index=True,
-            how="left",
+        transactions = pd.concat(
+            objs=[
+                self.data.transactions,
+                self.data.reward_transactions if self.rewards else pd.Series(),
+            ],
+        ).rename("transactions")
+        timestamp = transactions.rename("timestamp").map(self._extract_timestamp)
+        tx_hash = transactions.rename("hash").map(lambda x: x.hash)
+        message = transactions.rename("message").map(self._format_message)
+        balance = self._make_balance_frame(transactions)
+        # Drop assets that only touch foreign addresses
+        assets_to_drop = [
+            (x,)
+            for x in (
+                frozenset(
+                    # Assets that touch other addresses
+                    x[0]
+                    for x in balance.xs(False, level=2, axis=1).columns
+                )
+                - frozenset(
+                    # Assets that touch own addresses
+                    x[0]
+                    for x in balance.xs(True, level=2, axis=1).columns
+                )
+            )
+        ]
+        balance.drop(assets_to_drop, axis=1, inplace=True)
+
+        frame = pd.concat([timestamp, tx_hash, message], axis=1)
+        frame.columns = pd.MultiIndex.from_tuples(
+            [("metadata", c, "") for c in frame.columns]
         )
-        frame = pd.merge(
-            left=frame,
-            right=self._make_message_frame(),
-            left_index=True,
-            right_index=True,
-            how="left",
-        )
-        frame = pd.merge(
-            left=frame,
-            right=self._make_balance_frame(),
-            left_index=True,
-            right_index=True,
-            how="left",
-        )
+        frame = frame.merge(balance, left_index=True, right_index=True)
         frame.drop_duplicates(inplace=True)
-        frame.sort_values(by=("", "timestamp"), inplace=True)
-        frame.reset_index(inplace=True)
-        frame.drop([("index", "")], axis=1, inplace=True)
+        frame.sort_values(by=("metadata", "timestamp", ""), inplace=True)
         return frame
