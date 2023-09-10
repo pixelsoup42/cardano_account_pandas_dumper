@@ -93,6 +93,31 @@ class AccountData:
                 result_list.append(transaction)
         return pd.Series(name="Transactions", data=result_list)
 
+    @staticmethod
+    def _decode_asset_name(name: str, policy: str) -> str:
+        if isinstance(name, str):
+            name_bytes = bytearray(
+                [
+                    b if b in range(32, 127) else 127
+                    for b in bytes.fromhex(name.removeprefix(policy))
+                ]
+            )
+            return name_bytes.decode(encoding="ascii", errors="replace")
+        else:
+            return "???"
+
+    @classmethod
+    def _fix_api_asset(cls, asset: Namespace) -> Namespace:
+        if not hasattr(asset, "metadata") or asset.metadata is None:
+            asset.metadata = Namespace()
+        if not hasattr(asset.metadata, "name"):
+            asset.metadata.name = cls._decode_asset_name(
+                asset.asset_name, asset.policy_id
+            )
+        if not hasattr(asset.metadata, "decimals"):
+            asset.metadata.decimals = 0
+        return asset
+
     def _assets_from_transactions(self, api: BlockFrostApi) -> pd.Series:
         all_asset_ids: Set[str] = set()
         for tx_obj in self.transactions:
@@ -101,9 +126,23 @@ class AccountData:
                     [a.unit for i in tx_obj.utxos.inputs for a in i.amount]
                     + [a.unit for i in tx_obj.utxos.outputs for a in i.amount]
                 )
-        all_asset_ids.remove(AccountData.LOVELACE_ASSET)
+        lovelace_asset_obj = Namespace()
+        lovelace_asset_obj.metadata = Namespace()
+        lovelace_asset_obj.metadata.name = "ADA"
+        lovelace_asset_obj.metadata.decimals = self.LOVELACE_DECIMALS
+        lovelace_asset_obj.policy_id = ""
+        lovelace_asset_obj.asset_name = "ADA"
+
         return pd.Series(
-            name="Assets", data={asset: api.asset(asset) for asset in all_asset_ids}
+            name="Assets",
+            data={
+                asset: (
+                    self._fix_api_asset(api.asset(asset))
+                    if asset != self.LOVELACE_ASSET
+                    else lovelace_asset_obj
+                )
+                for asset in all_asset_ids
+            },
         )
 
     @staticmethod
@@ -166,13 +205,11 @@ class AccountPandasDumper:
     MUTED_POLICIES_KEY = "muted_policies"
     SCRIPTS_KEY = "scripts"
     LABELS_KEY = "labels"
-    ASSETS_KEY = "assets"
-    # Time for a stransaction is block_time + index * TRANSACTION_OFFSET
 
     def __init__(
         self,
         data: AccountData,
-        known_dict: Mapping[str, Mapping[str, str]],
+        known_dict: Any,
         detail_level: int,
         unmute: bool,
         truncate_length: Optional[int],
@@ -188,36 +225,14 @@ class AccountPandasDumper:
         self.rewards = rewards
 
     def _format_asset(self, asset: str) -> Optional[str]:
-        if asset == AccountData.LOVELACE_ASSET:
-            return " ADA"
-        if asset in self.known_dict[self.ASSETS_KEY]:
-            return self.known_dict[self.ASSETS_KEY][asset]
-        asset_obj = self.data.assets[asset]
-        if asset_obj.metadata and asset_obj.metadata.name:
-            return asset_obj.metadata.name
-        if isinstance(asset_obj.asset_name, str):
-            name_bytes = bytearray(
-                [
-                    b if b in range(32, 127) else 127
-                    for b in bytes.fromhex(
-                        asset_obj.asset_name.removeprefix(asset_obj.policy_id)
-                    )
-                ]
-            )
-            name_str = name_bytes.decode(encoding="ascii", errors="replace")
-        else:
-            name_str = "???"
-        policy = self._format_policy(asset_obj.policy_id, self.unmute)
-        return f"{policy}@{name_str}" if policy is not None else None
+        return self.data.assets[asset].metadata.name
 
     def _truncate(self, value: str) -> str:
         return (
             (value[: self.truncate_length] + "...") if self.truncate_length else value
         )
 
-    def _format_policy(self, policy: str, unmute: bool) -> Optional[str]:
-        if self.known_dict[self.MUTED_POLICIES_KEY].get(policy, False) and not unmute:
-            return None
+    def _format_policy(self, policy: str) -> Optional[str]:
         return self.known_dict[self.POLICIES_KEY].get(policy, self._truncate(policy))
 
     @staticmethod
@@ -281,7 +296,7 @@ class AccountPandasDumper:
                 )
             elif redeemer.purpose == "mint":
                 redeemer_scripts["Mint:"].append(
-                    self._format_policy(redeemer.script_hash, True)
+                    self._format_policy(redeemer.script_hash)
                 )
         for k, redeemer_script in redeemer_scripts.items():
             result.append(k)
@@ -310,11 +325,7 @@ class AccountPandasDumper:
         )
 
     def _decimals_for_asset(self, asset: str) -> int:
-        if asset == self.data.LOVELACE_ASSET:
-            return self.data.LOVELACE_DECIMALS
-        if asset in self.data.assets and self.data.assets[asset].metadata:
-            return self.data.assets[asset].metadata.decimals
-        return 0
+        return self.data.assets[asset].metadata.decimals
 
     def _transaction_balance(self, transaction: Namespace) -> Any:
         result: MutableMapping[Tuple[str, str, bool], np.longlong] = defaultdict(
@@ -358,20 +369,49 @@ class AccountPandasDumper:
 
         return result
 
-    def _make_balance_frame(self, transactions: pd.Series) -> pd.DataFrame:
-        balance = pd.DataFrame(
-            data=[self._transaction_balance(x) for x in transactions],
-            dtype=pd.Int64Dtype,
-        )
-        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
-        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        return balance
-
     @staticmethod
     def _extract_timestamp(transaction: Namespace) -> Any:
         return np.datetime64(
             datetime.datetime.fromtimestamp(transaction.block_time)
         ) + (int(transaction.index) * TRANSACTION_OFFSET)
+
+    def _drop_foreign_assets(self, balance: pd.DataFrame) -> None:
+        # Drop assets that only touch foreign addresses
+        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
+        assets_to_drop = frozenset(
+            # Assets that touch other addresses
+            x[0]
+            for x in balance.xs(False, level=-1, axis=1).columns
+        ) - frozenset(
+            # Assets that touch own addresses
+            x[0]
+            for x in balance.xs(True, level=-1, axis=1).columns
+        )
+
+        balance.drop(assets_to_drop, axis=1, inplace=True)
+
+    def _drop_muted_policies(self, balance: pd.DataFrame) -> None:
+        if (
+            (not self.unmute)
+            and self.MUTED_POLICIES_KEY in self.known_dict
+            and self.known_dict[self.MUTED_POLICIES_KEY]
+        ):
+            policies_to_mute = frozenset(self.known_dict[self.MUTED_POLICIES_KEY])
+            policy_length = len(self.known_dict[self.MUTED_POLICIES_KEY][0])
+            assets_to_drop = frozenset(
+                [
+                    x[0]
+                    for x in balance.columns
+                    if x[0][:policy_length] in policies_to_mute
+                ]
+            )
+            balance.drop(assets_to_drop, axis=1, inplace=True)
+
+    def _relabel_assets(self, balance: pd.DataFrame) -> None:
+        new_columns = [
+            (self.data.assets[x[0]].metadata.name,) + x[1:] for x in balance.columns
+        ]
+        balance.columns = new_columns
 
     def make_transaction_frame(self) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
@@ -397,25 +437,18 @@ class AccountPandasDumper:
         timestamp = transactions.rename("timestamp").map(self._extract_timestamp)
         tx_hash = transactions.rename("hash").map(lambda x: x.hash)
         message = transactions.rename("message").map(self._format_message)
-        balance = self._make_balance_frame(transactions)
-        # Drop assets that only touch foreign addresses
-        assets_to_drop = [
-            (x,)
-            for x in (
-                frozenset(
-                    # Assets that touch other addresses
-                    x[0]
-                    for x in balance.xs(False, level=2, axis=1).columns
-                )
-                - frozenset(
-                    # Assets that touch own addresses
-                    x[0]
-                    for x in balance.xs(True, level=2, axis=1).columns
-                )
-            )
-        ]
-        balance.drop(assets_to_drop, axis=1, inplace=True)
+        balance = pd.DataFrame(
+            data=[self._transaction_balance(x) for x in transactions],
+            dtype=pd.Int64Dtype,
+        )
+        self._drop_foreign_assets(balance)
+        self._drop_muted_policies(balance)
+        self._relabel_assets(balance)
+        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
+
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         balance_column_index_length = len(balance.columns[0])
+
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.columns = pd.MultiIndex.from_tuples(
             [
