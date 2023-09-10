@@ -361,6 +361,7 @@ class AccountPandasDumper:
     def _make_balance_frame(self, transactions: pd.Series) -> pd.DataFrame:
         balance = pd.DataFrame(
             data=[self._transaction_balance(x) for x in transactions],
+            dtype=pd.Int64Dtype,
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
@@ -414,12 +415,15 @@ class AccountPandasDumper:
             )
         ]
         balance.drop(assets_to_drop, axis=1, inplace=True)
-
+        balance_column_index_length = len(balance.columns[0])
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.columns = pd.MultiIndex.from_tuples(
-            [("metadata", c, "") for c in frame.columns]
+            [
+                ("metadata", c) + (balance_column_index_length - 2) * ("",)
+                for c in frame.columns
+            ]
         )
         frame = frame.merge(balance, left_index=True, right_index=True)
         frame.drop_duplicates(inplace=True)
-        frame.sort_values(by=("metadata", "timestamp", ""), inplace=True)
+        frame.sort_values(by=frame.columns[1], inplace=True)
         return frame
