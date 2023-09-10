@@ -173,7 +173,7 @@ def main():
             warnings.warn(f"Failed to write pandas file: {exception}")
     if args.csv_output:
         try:
-            dataframe.to_csv(args.csv_output, index=True)
+            dataframe.to_csv(args.csv_output, index=False)
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
     print("Done.")
