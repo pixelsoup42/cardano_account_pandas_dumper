@@ -33,8 +33,12 @@ class AccountData:
     ) -> None:
         self.staking_addresses = staking_addresses
         if to_block is None:
-            to_block = int(api.block_latest().height)
+            to_block = int(api.block_latest().height - 1)
         self.to_block = to_block
+        block_last = api.block(self.to_block)
+        block_after_last = api.block(self.to_block + 1)
+        self.end_time = block_after_last.time
+        self.end_epoch = block_last.epoch + 1
         self.own_addresses: FrozenSet[str] = self._own_addresses(api)
         self.rewards = rewards
         if self.rewards:
@@ -135,6 +139,7 @@ class AccountData:
             a_r
             for s_a in self.staking_addresses
             for a_r in api.account_rewards(s_a, gather_pages=True)
+            if a_r.epoch < self.end_epoch
         ]
 
         pool_result_list = {
@@ -406,6 +411,7 @@ class AccountPandasDumper:
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+
         return balance
 
     def make_transaction_frame(self) -> pd.DataFrame:
