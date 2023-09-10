@@ -9,8 +9,10 @@ from typing import (
     FrozenSet,
     List,
     Mapping,
+    MutableMapping,
     Optional,
     Set,
+    Tuple,
 )
 import pandas as pd
 import numpy as np
@@ -290,7 +292,7 @@ class AccountPandasDumper:
             ]
         ):
             result = ["(internal)"]
-        return " ".join(result)
+        return " ".join(result).removeprefix("Message : ")
 
     def _format_script(self, script: str) -> str:
         return self.known_dict[self.SCRIPTS_KEY].get(
@@ -314,7 +316,9 @@ class AccountPandasDumper:
         return 0
 
     def _transaction_balance(self, transaction: Namespace) -> Any:
-        result = {}
+        result: MutableMapping[Tuple[str, str], np.longlong] = defaultdict(
+            lambda: np.longlong(0)
+        )
         result[(self.data.LOVELACE_ASSET, "fees")] = np.longlong(transaction.fees)
         result[(self.data.LOVELACE_ASSET, "deposit")] = np.longlong(transaction.deposit)
         result[(self.data.LOVELACE_ASSET, "rewards")] = (
@@ -328,23 +332,16 @@ class AccountPandasDumper:
             if not transaction.reward_amount
             else np.longlong(transaction.reward_amount)
         )
-        balance_result: Dict = {}
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
-                    key = (amount.unit, utxo.address)
-                    if key not in balance_result:
-                        balance_result[key] = np.longlong(0)
-                    balance_result[key] -= np.longlong(amount.quantity)
+                    result[(amount.unit, utxo.address)] -= np.longlong(amount.quantity)
 
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
-                key = (amount.unit, utxo.address)
-                if key not in balance_result:
-                    balance_result[key] = np.longlong(0)
-                balance_result[key] += np.longlong(amount.quantity)
-        result.update({k: v for k, v in balance_result.items() if v != np.longlong(0)})
-        return result
+                result[(amount.unit, utxo.address)] += np.longlong(amount.quantity)
+
+        return dict([i for i in result.items() if i[1] != np.longlong(0)])
 
     def _make_hash_frame(self) -> pd.DataFrame:
         tx_hash = pd.DataFrame(
