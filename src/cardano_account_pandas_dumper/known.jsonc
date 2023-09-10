@@ -70,31 +70,31 @@
         "fd0d72fafee1d230a74c31ac503a192abd5b71888ae3f94128c1e634": "INDY staking NFT"
     },
     // Policies to mute
-    "muted_policies": {
-        "0029cb7c88c7567b63d1a512c0ed626aa169688ec980730c0473b913": true,
-        "026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a570": true,
-        "0be55d262b29f564998ff81efe21bdc0022621c12f15af08d0f2ddb1": true,
-        "13aa2accf2e1561723aa26871e071fdf32c867cff7e7d50ad470d62f": true,
-        "24b458412c2a7f9acb9c53c7ec4325b36806912ed56d2f91bfcf4d26": true,
-        "2f2e0404310c106e2a260e8eb5a7e43f00cff42c667489d30e179816": true,
-        "2fccae8bc1c8553a2185b2e77ccdea22f2e1d6e87beb80ef4eaf8cce": true,
-        "408f13b240f57c3473b5727a68a88c50c1b6bb15c0c10912008dc59e": true,
-        "5817c34e5702473304f3cf676299176d3824e55b8c0bfa94830429fd": true,
-        "636c06ed152e70e9a1240da585a2841c15e4c3174044ca9a62cadab2": true,
-        "72c8ee38fc1adfc5db49f7384bd64d41e9b9ce46ec11ba9a292e5d02": true,
-        "8a7b0a43a169218fb66996c3945f53d7712eae9e31db193adb55663f": true,
-        "909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f": true,
-        "97da12de04a6b527cc3b3469c5e5485cf258dfd1021f12e728f2e714": true,
-        "af3d70acf4bd5b3abb319a7d75c89fb3e56eafcdd46b2e9b57a2557f": true,
-        "d195ca7db29f0f13a00cac7fca70426ff60bad4e1e87d3757fae8484": true,
-        "de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f": true,
-        "e3455f2715338b454fb853442f72dc03b98396854f97510027fe22ff": true,
-        "e4214b7cce62ac6fbba385d164df48e157eae5863521b4b67ca71d86": true,
-        "e8a447d4e19016ca2aa74d20b4c4de87adb1f21dfb5493bf2d7281a6": true,
-        "f66d78b4a3cb3d37afa0ec36461e51ecbde00f26c8f0a68f94b69880": true,
-        "21ca2902ad0406bc2ce361ad91157b3542544d86d4e3d3e3c43f1763": true,
-        "2960fe7a50e78948eb7219079c39b8169e34a4464a3f1aea9328d87c": true
-    },
+    "muted_policies": [
+        "0029cb7c88c7567b63d1a512c0ed626aa169688ec980730c0473b913",
+        "026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a570",
+        "0be55d262b29f564998ff81efe21bdc0022621c12f15af08d0f2ddb1",
+        "13aa2accf2e1561723aa26871e071fdf32c867cff7e7d50ad470d62f",
+        "24b458412c2a7f9acb9c53c7ec4325b36806912ed56d2f91bfcf4d26",
+        "2f2e0404310c106e2a260e8eb5a7e43f00cff42c667489d30e179816",
+        "2fccae8bc1c8553a2185b2e77ccdea22f2e1d6e87beb80ef4eaf8cce",
+        "408f13b240f57c3473b5727a68a88c50c1b6bb15c0c10912008dc59e",
+        "5817c34e5702473304f3cf676299176d3824e55b8c0bfa94830429fd",
+        "636c06ed152e70e9a1240da585a2841c15e4c3174044ca9a62cadab2",
+        "72c8ee38fc1adfc5db49f7384bd64d41e9b9ce46ec11ba9a292e5d02",
+        "8a7b0a43a169218fb66996c3945f53d7712eae9e31db193adb55663f",
+        "909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f",
+        "97da12de04a6b527cc3b3469c5e5485cf258dfd1021f12e728f2e714",
+        "af3d70acf4bd5b3abb319a7d75c89fb3e56eafcdd46b2e9b57a2557f",
+        "d195ca7db29f0f13a00cac7fca70426ff60bad4e1e87d3757fae8484",
+        "de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f",
+        "e3455f2715338b454fb853442f72dc03b98396854f97510027fe22ff",
+        "e4214b7cce62ac6fbba385d164df48e157eae5863521b4b67ca71d86",
+        "e8a447d4e19016ca2aa74d20b4c4de87adb1f21dfb5493bf2d7281a6",
+        "f66d78b4a3cb3d37afa0ec36461e51ecbde00f26c8f0a68f94b69880",
+        "21ca2902ad0406bc2ce361ad91157b3542544d86d4e3d3e3c43f1763",
+        "2960fe7a50e78948eb7219079c39b8169e34a4464a3f1aea9328d87c"
+    ],
     // Known script hashes
     "scripts": {
         "00fb107bfbd51b3a5638867d3688e986ba38ff34fb738f5bd42b20d5": "MuesliSwap (Partial Match Order)",
@@ -125,8 +125,6 @@
         "e6c90a5923713af5786963dee0fdffd830ca7e0c86a041d9e5833e91": "Wingriders (Pool payment credential)",
         "ea5358d9fe82cc7ad8de0e76b4eabd851526408e51daa9d8bb4b137d": "Indigo Protocol (CDP creator)"
     },
-    // Known assets
-    "assets": {},
     // Known metadata labels
     "labels": {
         "674": "Message",
