@@ -452,5 +452,5 @@ class AccountPandasDumper:
         )
         frame = frame.merge(balance, left_index=True, right_index=True)
         frame.drop_duplicates(inplace=True)
-        frame.sort_values(by=frame.columns[1], inplace=True)
+        frame.sort_values(by=frame.columns[0], inplace=True)
         return frame
