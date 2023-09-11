@@ -46,7 +46,7 @@ class AccountData:
         if self.rewards:
             self.reward_transactions: pd.Series = self._reward_transactions(api)
         self.transactions: pd.Series = self._transaction_data(api)
-        self.assets: pd.Series = self._assets_from_transactions(api)
+        self.assets: pd.DataFrame = self._assets_from_transactions(api)
 
     def _own_addresses(self, api: BlockFrostApi) -> FrozenSet[str]:
         return frozenset(
@@ -93,32 +93,20 @@ class AccountData:
                 result_list.append(transaction)
         return pd.Series(name="Transactions", data=result_list)
 
-    @staticmethod
-    def _decode_asset_name(name: str, policy: str) -> str:
-        if isinstance(name, str):
-            name_bytes = bytearray(
-                [
-                    b if b in range(32, 127) else 127
-                    for b in bytes.fromhex(name.removeprefix(policy))
-                ]
-            )
-            return name_bytes.decode(encoding="ascii", errors="replace")
-        else:
-            return "???"
-
     @classmethod
-    def _fix_api_asset(cls, asset: Namespace) -> Namespace:
+    def _fix_api_asset(cls, asset_id: str, asset: Namespace) -> Namespace:
+        asset.asset_id = asset_id
         if not hasattr(asset, "metadata") or asset.metadata is None:
             asset.metadata = Namespace()
-        if not hasattr(asset.metadata, "name"):
-            asset.metadata.name = cls._decode_asset_name(
-                asset.asset_name, asset.policy_id
-            )
+        if not (hasattr(asset.metadata, "name") and asset.metadata.name):
+            asset.raw_name = asset_id.removeprefix(asset.policy_id)
+        else:
+            asset.raw_name = str(bytes(asset.metadata.name, "utf-8").hex())
         if not hasattr(asset.metadata, "decimals"):
             asset.metadata.decimals = 0
         return asset
 
-    def _assets_from_transactions(self, api: BlockFrostApi) -> pd.Series:
+    def _assets_from_transactions(self, api: BlockFrostApi) -> pd.DataFrame:
         all_asset_ids: Set[str] = set()
         for tx_obj in self.transactions:
             if hasattr(tx_obj, "utxos"):
@@ -132,18 +120,25 @@ class AccountData:
         lovelace_asset_obj.metadata.decimals = self.LOVELACE_DECIMALS
         lovelace_asset_obj.policy_id = ""
         lovelace_asset_obj.asset_name = "ADA"
-
-        return pd.Series(
-            name="Assets",
-            data={
-                asset: (
-                    self._fix_api_asset(api.asset(asset))
-                    if asset != self.LOVELACE_ASSET
-                    else lovelace_asset_obj
-                )
-                for asset in all_asset_ids
-            },
+        asset_list = [
+            self._fix_api_asset(
+                asset,
+                api.asset(asset)
+                if asset != self.LOVELACE_ASSET
+                else lovelace_asset_obj,
+            )
+            for asset in all_asset_ids
+        ]
+        assets = pd.DataFrame(
+            data=asset_list,
+            index=pd.MultiIndex.from_tuples(
+                [
+                    (asset.asset_id, asset.policy_id, asset.raw_name)
+                    for asset in asset_list
+                ]
+            ),
         )
+        return assets
 
     @staticmethod
     def _reward_transaction(
@@ -324,18 +319,22 @@ class AccountPandasDumper:
             "other",
         )
 
-    def _decimals_for_asset(self, asset: str) -> int:
-        return self.data.assets[asset].metadata.decimals
+    def _decimals_for_asset(self, asset: str) -> np.longlong:
+        return np.longlong(self.data.assets[asset].metadata.decimals)
+
+    def _asset_tuple(self, asset_id: str) -> Tuple:
+        asset = self.data.assets[0][(asset_id,)][0]
+        return (asset.policy_id, asset.raw_name)
 
     def _transaction_balance(self, transaction: Namespace) -> Any:
-        result: MutableMapping[Tuple[str, str, bool], np.longlong] = defaultdict(
-            lambda: np.longlong(0)
-        )
-        result[(self.data.LOVELACE_ASSET, "fees", True)] = np.longlong(transaction.fees)
-        result[(self.data.LOVELACE_ASSET, "deposit", True)] = np.longlong(
-            transaction.deposit
-        )
-        result[(self.data.LOVELACE_ASSET, "rewards", True)] = (
+        result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
+        result[
+            self._asset_tuple(self.data.LOVELACE_ASSET) + ("fees", True)
+        ] = np.longlong(transaction.fees)
+        result[
+            self._asset_tuple(self.data.LOVELACE_ASSET) + ("deposit", True)
+        ] = np.longlong(transaction.deposit)
+        result[self._asset_tuple(self.data.LOVELACE_ASSET) + ("rewards", True)] = (
             np.negative(
                 functools.reduce(
                     np.add,
@@ -350,8 +349,8 @@ class AccountPandasDumper:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
                     result[
-                        (
-                            amount.unit,
+                        self._asset_tuple(amount.unit)
+                        + (
                             utxo.address,
                             utxo.address in self.data.own_addresses,
                         )
@@ -360,8 +359,8 @@ class AccountPandasDumper:
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
                 result[
-                    (
-                        amount.unit,
+                    self._asset_tuple(amount.unit)
+                    + (
                         utxo.address,
                         utxo.address in self.data.own_addresses,
                     )
@@ -380,11 +379,11 @@ class AccountPandasDumper:
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         assets_to_drop = frozenset(
             # Assets that touch other addresses
-            x[0]
+            x[:2]
             for x in balance.xs(False, level=-1, axis=1).columns
         ) - frozenset(
             # Assets that touch own addresses
-            x[0]
+            x[:2]
             for x in balance.xs(True, level=-1, axis=1).columns
         )
 
@@ -397,15 +396,10 @@ class AccountPandasDumper:
             and self.known_dict[self.MUTED_POLICIES_KEY]
         ):
             policies_to_mute = frozenset(self.known_dict[self.MUTED_POLICIES_KEY])
-            policy_length = len(self.known_dict[self.MUTED_POLICIES_KEY][0])
-            assets_to_drop = frozenset(
-                [
-                    x[0]
-                    for x in balance.columns
-                    if x[0][:policy_length] in policies_to_mute
-                ]
+            policies_to_drop = frozenset(
+                [x[0] for x in balance.columns if x[0] in policies_to_mute]
             )
-            balance.drop(assets_to_drop, axis=1, inplace=True)
+            balance.drop(policies_to_drop, axis=1, inplace=True)
 
     def _relabel_assets(self, balance: pd.DataFrame) -> None:
         new_columns = [
@@ -443,7 +437,7 @@ class AccountPandasDumper:
         )
         self._drop_foreign_assets(balance)
         self._drop_muted_policies(balance)
-        self._relabel_assets(balance)
+        # self._relabel_assets(balance)
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
 
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
