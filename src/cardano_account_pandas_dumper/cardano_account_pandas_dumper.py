@@ -66,16 +66,18 @@ class AccountData:
         self,
         api: BlockFrostApi,
     ) -> pd.Series:
-        transaction_set = set()
-        for addr in self.own_addresses:
-            for outer_tx in api.address_transactions(
-                addr,
-                to_block=self.to_block,
-                gather_pages=True,
-            ):
-                transaction_set.add(outer_tx.tx_hash)
         result_list = []
-        for tx_hash in transaction_set:
+        for tx_hash in frozenset(
+            [
+                outer_tx.tx_hash
+                for addr in self.own_addresses
+                for outer_tx in api.address_transactions(
+                    addr,
+                    to_block=self.to_block,
+                    gather_pages=True,
+                )
+            ]
+        ):
             transaction = api.transaction(tx_hash)
             transaction.utxos = api.transaction_utxos(tx_hash)
             transaction.utxos.nonref_inputs = [
@@ -203,20 +205,17 @@ class AccountData:
 class AccountPandasDumper:
     """Hold logic to convert an instance of AccountData to a Pandas dataframe."""
 
-    ADDRESSES_KEY = "addresses"
-    POLICIES_KEY = "policies"
-    MUTED_POLICIES_KEY = "muted_policies"
-    SCRIPTS_KEY = "scripts"
-    LABELS_KEY = "labels"
     TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
 
     def __init__(self, data: AccountData, known_dict: Any, args: argparse.Namespace):
         self.data = data
         self.known_dict = known_dict
         self.args = args
-
-    def _format_asset(self, asset: str) -> Optional[str]:
-        return self.data.assets[asset].metadata.name
+        self.addresses = pd.Series(known_dict.get("addresses", {}))
+        self.policies = pd.Series(known_dict.get("policies", {}))
+        self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
+        self.scripts = pd.Series(known_dict.get("scripts", {}))
+        self.labels = pd.Series(known_dict.get("labels", {}))
 
     def _truncate(self, value: str) -> str:
         return (
@@ -224,9 +223,6 @@ class AccountPandasDumper:
             if self.args.no_truncate
             else (value[: self.args.truncate_length] + "...")
         )
-
-    def _format_policy(self, policy: str) -> Optional[str]:
-        return self.known_dict[self.POLICIES_KEY].get(policy, self._truncate(policy))
 
     @staticmethod
     def _is_hex_number(num: Any) -> bool:
@@ -263,10 +259,9 @@ class AccountPandasDumper:
     def _format_message(self, tx_obj: blockfrost.utils.Namespace) -> str:
         result: List[str] = []
         for metadata_key in tx_obj.metadata:
-            if metadata_key.label in self.known_dict[self.LABELS_KEY]:
-                label = self.known_dict[self.LABELS_KEY][metadata_key.label]
-            else:
-                label = metadata_key.label
+            label = self.labels.get(
+                metadata_key.label, self._truncate(metadata_key.label)
+            )
             val = self._munge_metadata(metadata_key.json_metadata)
             if (
                 self._is_hex_number(label)
@@ -300,18 +295,19 @@ class AccountPandasDumper:
         return " ".join(result).removeprefix("Message : ")
 
     def _format_script(self, script: str) -> str:
-        return self.known_dict[self.SCRIPTS_KEY].get(
-            script,
-            self._truncate(script),
-        )
+        return self.scripts.get(script, self._truncate(script))
 
     def _format_address(self, address: str) -> str:
-        if address in self.data.own_addresses:
-            return " own"
-        return self.known_dict[self.ADDRESSES_KEY].get(
-            address,
-            "other",
-        )
+        return self.addresses.get(address, self._truncate(address))
+
+    def _format_asset_name(self, name: str) -> str:
+        try:
+            return bytes.fromhex(name).decode()
+        except UnicodeDecodeError:
+            return name
+
+    def _format_policy(self, policy: str) -> Optional[str]:
+        return self.policies.get(policy, self._truncate(policy))
 
     def _decimals_for_asset(self, asset: str) -> np.longlong:
         return np.longlong(self.data.assets[asset].metadata.decimals)
@@ -384,23 +380,18 @@ class AccountPandasDumper:
         balance.drop(assets_to_drop, axis=1, inplace=True)
 
     def _drop_muted_policies(self, balance: pd.DataFrame) -> None:
-        if (
-            (not self.args.unmute)
-            and self.MUTED_POLICIES_KEY in self.known_dict
-            and self.known_dict[self.MUTED_POLICIES_KEY]
-        ):
-            policies_to_mute = frozenset(self.known_dict[self.MUTED_POLICIES_KEY])
-            policies_to_drop = frozenset(
-                [x[0] for x in balance.columns if x[0] in policies_to_mute]
-            )
-            balance.sort_index(inplace=True, axis=1)
-            balance.drop(policies_to_drop, axis=1, inplace=True)
+        policies_to_drop = frozenset(
+            [x[0] for x in balance.columns if x[0] in self.muted_policies]
+        )
+        balance.sort_index(inplace=True, axis=1)
+        balance.drop(policies_to_drop, axis=1, inplace=True)
 
     def _relabel_assets(self, balance: pd.DataFrame) -> None:
-        new_columns = [
-            (self.data.assets[x[0]].metadata.name,) + x[1:] for x in balance.columns
+        new_columns: List[Tuple] = [
+            (self._format_policy(x[0]), self._format_asset_name(x[1])) + tuple(x[2:])
+            for x in balance.columns
         ]
-        balance.columns = new_columns
+        balance.columns = pd.MultiIndex.from_tuples(new_columns)
 
     def make_transaction_frame(self) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
@@ -431,8 +422,13 @@ class AccountPandasDumper:
             dtype=pd.Int64Dtype,
         )
         self._drop_foreign_assets(balance)
-        self._drop_muted_policies(balance)
-        # self._relabel_assets(balance)
+        if not self.args.unmute:
+            self._drop_muted_policies(balance)
+        if self.args.detail_level == 1:
+            balance.drop(labels=False, axis=1, level=3, inplace=True)
+        if not self.args.raw_values:
+            self._relabel_assets(balance)
+
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         frame = pd.concat([timestamp, tx_hash, message], axis=1)

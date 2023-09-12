@@ -82,8 +82,8 @@ def _create_arg_parser():
         action="store_true",
     )
     result.add_argument(
-        "--raw_asset",
-        help="Add header row with concatenation of policy_id and hex-encoded asset_name.",
+        "--raw_values",
+        help="Keep assets, policies and addresses as hex instead of looking up names.",
         action="store_true",
     )
     result.add_argument(

@@ -5,7 +5,6 @@
         "addr1v95sf69jcfhnmknvffwmfvlvnccatqwfjcyh0nlfc6gh5scta2yzg": "CoinBase",
         "addr1v9u7va2sktlnz8dp3qadpnxxlv4m03672jy6elmntlxxs7q9nnwl9": "CoinBase",
         "addr1vydqq7fww4sga05jvtfckw3z9z8n8n2zxj0fyelvdl86acqhd9l70": "CoinBase",
-        "addr1wy49natatgz5swjenvvqatwn48uj5p0lvw86uhvjjuth8xs2yr9fw": "DripDropz",
         "addr1w80ptp0qgmcklhmeweesqgeurtlma8fsxsr9dt8au30fzss0czhl9": "Indigo Protocol (Stability pool)",
         "addr1w849xkxel6pvc7kcmc88dd82hkz32fjq3ega42wchd93xlgqxxpv5": "Indigo Protocol (CDP creator)",
         "addr1w89s3lfv7gkugker5llecq6x3k2vjvfnvp4692laeqe6w6s93vj3j": "Explosif (Direct sale)",
@@ -24,6 +23,7 @@
         "addr1wxr2a8htmzuhj39y2gq7ftkpxv98y2g67tg8zezthgq4jkg0a4ul4": "Wingriders (Request)",
         "addr1wxvd7wcq59gqljmhm2s9yp2slvygljfr8xtc3wykx7uaukgt8lqh6": "Minswap (Harvest v1)",
         "addr1wxwl25gyxf4ryexcq02yakr389vp68y39cnt4rnnhsu9utcjfhaef": "Minswap (MINt staking liquidity)",
+        "addr1wy49natatgz5swjenvvqatwn48uj5p0lvw86uhvjjuth8xs2yr9fw": "DripDropz",
         "addr1wycwqtlc2a3f3w4axqwwukyj34anyqmy404w24kydc70gtg5w4elq": "MELD (staking 2)",
         "addr1wypr0np3xatwhddulsnj3aaac65qg768zgs2xpd2xuaj0zscmvh0n": "Wingriders (Farm/Voting)",
         "addr1z8nvjzjeydcn4atcd93aac8allvrpjn7pjr2qsweukpnay0ycn5y6v5mjqqcs9xqa24kv5qk73tqsf3ufrtvxh9kts0qveyg6l": "Wingriders (Pool payment credential)",
@@ -39,35 +39,12 @@
         "addr1zxj47sy4qxlktqzmkrw8dahe46gtv8seakrshsqz26qnvzypw288a4x0xf8pxgcntelxmyclq83s0ykeehchz2wtspksr3q9nx": "jpg.store (Offers)",
         "addr1zyq0kyrml023kwjk8zr86d5gaxrt5w8lxnah8r6m6s4jp4g3r6dxnzml343sx8jweqn4vn3fz2kj8kgu9czghx0jrsyqqktyhv": "MuesliSwap (Partial Match Order)"
     },
-    // Known policies
-    "policies": {
-        "0029cb7c88c7567b63d1a512c0ed626aa169688ec980730c0473b913": "Sundaeswap",
-        "026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a570": "Wingriders Factory/Liquidity token v1",
-        "0be55d262b29f564998ff81efe21bdc0022621c12f15af08d0f2ddb1": "Minswap LP NFT 2",
-        "13aa2accf2e1561723aa26871e071fdf32c867cff7e7d50ad470d62f": "Minswap LP NFT 2",
-        "21ca2902ad0406bc2ce361ad91157b3542544d86d4e3d3e3c43f1763": "VyFI NFT 1",
-        "24b458412c2a7f9acb9c53c7ec4325b36806912ed56d2f91bfcf4d26": "INDY staking NFT",
-        "2960fe7a50e78948eb7219079c39b8169e34a4464a3f1aea9328d87c": "VyFI NFT 2",
-        "2f2e0404310c106e2a260e8eb5a7e43f00cff42c667489d30e179816": "Minswap NFT ?",
-        "2fccae8bc1c8553a2185b2e77ccdea22f2e1d6e87beb80ef4eaf8cce": "INDY Gov NFT",
-        "408f13b240f57c3473b5727a68a88c50c1b6bb15c0c10912008dc59e": "INDY iBTC mint NFT",
-        "443c51db609bba8b2aa4c8af248bf797cbfcfa1e413c443296a50813": "INDY SP Account",
-        "4c820aadf6ae8c755430455f5803d283bde0b20114bd93a8f381c72c": "MELD",
-        "5817c34e5702473304f3cf676299176d3824e55b8c0bfa94830429fd": "MuesliSwap NFT",
-        "636c06ed152e70e9a1240da585a2841c15e4c3174044ca9a62cadab2": "NFT test",
-        "708f5e6d597fc038d09a738d7be32edd6ea779d6feb32a53668d9050": "INDY CDP NFT",
-        "72c8ee38fc1adfc5db49f7384bd64d41e9b9ce46ec11ba9a292e5d02": "NFT test",
-        "8a7b0a43a169218fb66996c3945f53d7712eae9e31db193adb55663f": "NFT test",
-        "909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f": "MuesliSwap NFT Policy v2",
-        "97da12de04a6b527cc3b3469c5e5485cf258dfd1021f12e728f2e714": "INDY IASSET NFT",
-        "af3d70acf4bd5b3abb319a7d75c89fb3e56eafcdd46b2e9b57a2557f": "MuesliSwap NFT",
-        "d195ca7db29f0f13a00cac7fca70426ff60bad4e1e87d3757fae8484": "Minswap LP NFT 1",
-        "de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f": "MuesliSwap Factory Policy v2",
-        "e3455f2715338b454fb853442f72dc03b98396854f97510027fe22ff": "INDY iUSD NFT",
-        "e4214b7cce62ac6fbba385d164df48e157eae5863521b4b67ca71d86": "Minswap NFT",
-        "e8a447d4e19016ca2aa74d20b4c4de87adb1f21dfb5493bf2d7281a6": "Sundae scooper",
-        "f66d78b4a3cb3d37afa0ec36461e51ecbde00f26c8f0a68f94b69880": "Indigo",
-        "fd0d72fafee1d230a74c31ac503a192abd5b71888ae3f94128c1e634": "INDY staking NFT"
+    // Known metadata labels
+    "labels": {
+        "61284": "Catalyst",
+        "61285": "Catalyst Sig",
+        "674": "Message",
+        "914425": "Indigo SP Reward"
     },
     // Policies to mute
     "muted_policies": [
@@ -95,6 +72,39 @@
         "21ca2902ad0406bc2ce361ad91157b3542544d86d4e3d3e3c43f1763",
         "2960fe7a50e78948eb7219079c39b8169e34a4464a3f1aea9328d87c"
     ],
+    // Known policies
+    "policies": {
+        "0029cb7c88c7567b63d1a512c0ed626aa169688ec980730c0473b913": "Sundaeswap LP",
+        "026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a570": "Wingriders Factory/Liquidity token v1",
+        "0be55d262b29f564998ff81efe21bdc0022621c12f15af08d0f2ddb1": "Minswap LP NFT 2",
+        "13aa2accf2e1561723aa26871e071fdf32c867cff7e7d50ad470d62f": "Minswap LP NFT 2",
+        "21ca2902ad0406bc2ce361ad91157b3542544d86d4e3d3e3c43f1763": "VyFI NFT 1",
+        "24b458412c2a7f9acb9c53c7ec4325b36806912ed56d2f91bfcf4d26": "INDY staking NFT",
+        "2960fe7a50e78948eb7219079c39b8169e34a4464a3f1aea9328d87c": "VyFI NFT 2",
+        "29d222ce763455e3d7a09a665ce554f00ac89d2e99a1a83d267170c6": "Minswap policy",
+        "2f2e0404310c106e2a260e8eb5a7e43f00cff42c667489d30e179816": "Minswap NFT ?",
+        "2fccae8bc1c8553a2185b2e77ccdea22f2e1d6e87beb80ef4eaf8cce": "INDY Gov NFT",
+        "408f13b240f57c3473b5727a68a88c50c1b6bb15c0c10912008dc59e": "INDY iBTC mint NFT",
+        "443c51db609bba8b2aa4c8af248bf797cbfcfa1e413c443296a50813": "INDY SP Account",
+        "4c820aadf6ae8c755430455f5803d283bde0b20114bd93a8f381c72c": "MELD",
+        "5817c34e5702473304f3cf676299176d3824e55b8c0bfa94830429fd": "MuesliSwap NFT",
+        "636c06ed152e70e9a1240da585a2841c15e4c3174044ca9a62cadab2": "NFT test",
+        "708f5e6d597fc038d09a738d7be32edd6ea779d6feb32a53668d9050": "INDY CDP NFT",
+        "72c8ee38fc1adfc5db49f7384bd64d41e9b9ce46ec11ba9a292e5d02": "NFT test",
+        "869fc72c11977e4be3e8e1cc63cca008a925886332795c9601f965ca": "USDC policy",
+        "8a7b0a43a169218fb66996c3945f53d7712eae9e31db193adb55663f": "NFT test",
+        "909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f": "MuesliSwap NFT Policy v2",
+        "97da12de04a6b527cc3b3469c5e5485cf258dfd1021f12e728f2e714": "INDY IASSET NFT",
+        "af3d70acf4bd5b3abb319a7d75c89fb3e56eafcdd46b2e9b57a2557f": "MuesliSwap NFT",
+        "d195ca7db29f0f13a00cac7fca70426ff60bad4e1e87d3757fae8484": "Minswap LP NFT 1",
+        "de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f": "MuesliSwap Factory Policy v2",
+        "e3455f2715338b454fb853442f72dc03b98396854f97510027fe22ff": "INDY iUSD NFT",
+        "e4214b7cce62ac6fbba385d164df48e157eae5863521b4b67ca71d86": "Minswap NFT",
+        "e8a447d4e19016ca2aa74d20b4c4de87adb1f21dfb5493bf2d7281a6": "Sundae scooper",
+        "f66d78b4a3cb3d37afa0ec36461e51ecbde00f26c8f0a68f94b69880": "Indigo",
+        "fd0d72fafee1d230a74c31ac503a192abd5b71888ae3f94128c1e634": "INDY staking NFT",
+        "9a9693a9a37912a5097918f97918d15240c92ab729a0b7c4aa144d77": "Sundae policy",
+    },
     // Known script hashes
     "scripts": {
         "00fb107bfbd51b3a5638867d3688e986ba38ff34fb738f5bd42b20d5": "MuesliSwap (Partial Match Order)",
@@ -124,12 +134,5 @@
         "e4d2fb0b8d275852103fd75801e2c7dcf6ed3e276c74cabadbe5b8b6": "Indigo Protocol (CDP)",
         "e6c90a5923713af5786963dee0fdffd830ca7e0c86a041d9e5833e91": "Wingriders (Pool payment credential)",
         "ea5358d9fe82cc7ad8de0e76b4eabd851526408e51daa9d8bb4b137d": "Indigo Protocol (CDP creator)"
-    },
-    // Known metadata labels
-    "labels": {
-        "674": "Message",
-        "61284": "Catalyst",
-        "61285": "Catalyst Sig",
-        "914425": "Indigo SP Reward"
     }
 }
