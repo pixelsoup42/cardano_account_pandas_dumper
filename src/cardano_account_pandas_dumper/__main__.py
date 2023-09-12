@@ -157,13 +157,7 @@ def main():
     else:
         parser.exit(status=1, message="Staking address(es) required.")
     reporter = AccountPandasDumper(
-        data=data_from_api,
-        known_dict=known_dict_from_file,
-        detail_level=args.detail_level,
-        unmute=args.unmute,
-        truncate_length=None if args.no_truncate else args.truncate_length,
-        raw_asset=args.raw_asset or False,
-        rewards=data_from_api.rewards,
+        data=data_from_api, known_dict=known_dict_from_file, args=args
     )
     dataframe = reporter.make_transaction_frame()
     if args.pandas_output:

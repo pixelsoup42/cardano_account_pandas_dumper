@@ -1,4 +1,5 @@
 """ Cardano Account To Pandas Dumper."""
+import argparse
 import datetime
 import functools
 import itertools
@@ -210,30 +211,19 @@ class AccountPandasDumper:
     SCRIPTS_KEY = "scripts"
     LABELS_KEY = "labels"
 
-    def __init__(
-        self,
-        data: AccountData,
-        known_dict: Any,
-        detail_level: int,
-        unmute: bool,
-        truncate_length: Optional[int],
-        raw_asset: bool,
-        rewards: bool,
-    ):
-        self.known_dict = known_dict
+    def __init__(self, data: AccountData, known_dict: Any, args: argparse.Namespace):
         self.data = data
-        self.truncate_length = truncate_length
-        self.detail_level = detail_level
-        self.unmute = unmute
-        self.raw_asset = raw_asset
-        self.rewards = rewards
+        self.known_dict = known_dict
+        self.args = args
 
     def _format_asset(self, asset: str) -> Optional[str]:
         return self.data.assets[asset].metadata.name
 
     def _truncate(self, value: str) -> str:
         return (
-            (value[: self.truncate_length] + "...") if self.truncate_length else value
+            value
+            if self.args.no_truncate
+            else (value[: self.args.truncate_length] + "...")
         )
 
     def _format_policy(self, policy: str) -> Optional[str]:
@@ -259,14 +249,14 @@ class AccountPandasDumper:
                 hex_name = self._is_hex_number(att)
                 value = getattr(obj, att)
                 hex_value = isinstance(value, str) and self._is_hex_number(value)
-                if (hex_name and hex_value) and not self.unmute:
+                if (hex_name and hex_value) and not self.args.unmute:
                     continue
                 out_att = self._truncate(att) if hex_name else att
                 value = self._munge_metadata(value)
                 if value:
                     result[out_att] = value
             return result
-        elif isinstance(obj, str) and self._is_hex_number(obj) and not self.unmute:
+        elif isinstance(obj, str) and self._is_hex_number(obj) and not self.args.unmute:
             return {}
         else:
             return obj
@@ -282,7 +272,7 @@ class AccountPandasDumper:
             if (
                 self._is_hex_number(label)
                 and (not val or self._is_hex_number(val))
-                and not self.unmute
+                and not self.args.unmute
             ):
                 continue
             result.append(label)
@@ -396,7 +386,7 @@ class AccountPandasDumper:
 
     def _drop_muted_policies(self, balance: pd.DataFrame) -> None:
         if (
-            (not self.unmute)
+            (not self.args.unmute)
             and self.MUTED_POLICIES_KEY in self.known_dict
             and self.known_dict[self.MUTED_POLICIES_KEY]
         ):
@@ -431,7 +421,7 @@ class AccountPandasDumper:
         transactions = pd.concat(
             objs=[
                 self.data.transactions,
-                self.data.reward_transactions if self.rewards else pd.Series(),
+                pd.Series() if self.args.no_rewards else self.data.reward_transactions,
             ],
         ).rename("transactions")
         timestamp = transactions.rename("timestamp").map(self._extract_timestamp)
@@ -457,6 +447,6 @@ class AccountPandasDumper:
             ]
         )
         frame = frame.join(balance)
-        frame.drop_duplicates(inplace=True)
+        # frame.drop_duplicates(inplace=True)
         frame.sort_values(by=frame.columns[0], inplace=True)
         return frame
