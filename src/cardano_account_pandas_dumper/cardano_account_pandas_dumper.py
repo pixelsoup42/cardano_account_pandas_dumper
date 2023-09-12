@@ -200,9 +200,6 @@ class AccountData:
         ).sort_index()
 
 
-TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
-
-
 class AccountPandasDumper:
     """Hold logic to convert an instance of AccountData to a Pandas dataframe."""
 
@@ -211,6 +208,7 @@ class AccountPandasDumper:
     MUTED_POLICIES_KEY = "muted_policies"
     SCRIPTS_KEY = "scripts"
     LABELS_KEY = "labels"
+    TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
 
     def __init__(self, data: AccountData, known_dict: Any, args: argparse.Namespace):
         self.data = data
@@ -364,11 +362,11 @@ class AccountPandasDumper:
 
         return result
 
-    @staticmethod
-    def _extract_timestamp(transaction: blockfrost.utils.Namespace) -> Any:
+    @classmethod
+    def _extract_timestamp(cls, transaction: blockfrost.utils.Namespace) -> Any:
         return np.datetime64(
             datetime.datetime.fromtimestamp(transaction.block_time)
-        ) + (int(transaction.index) * TRANSACTION_OFFSET)
+        ) + (int(transaction.index) * cls.TRANSACTION_OFFSET)
 
     def _drop_foreign_assets(self, balance: pd.DataFrame) -> None:
         # Drop assets that only touch foreign addresses
@@ -436,14 +434,12 @@ class AccountPandasDumper:
         self._drop_muted_policies(balance)
         # self._relabel_assets(balance)
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
-
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        balance_column_index_length = len(balance.columns[0])
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
             [
-                ("metadata", c) + (balance_column_index_length - 2) * ("",)
+                ("metadata", c) + (len(balance.columns[0]) - 2) * ("",)
                 for c in frame.columns
             ]
         )
