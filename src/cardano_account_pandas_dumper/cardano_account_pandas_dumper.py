@@ -66,32 +66,33 @@ class AccountData:
         self,
         api: BlockFrostApi,
     ) -> pd.Series:
-        result_list = []
+        transaction_set = set()
         for addr in self.own_addresses:
             for outer_tx in api.address_transactions(
                 addr,
                 to_block=self.to_block,
                 gather_pages=True,
             ):
-                transaction = api.transaction(outer_tx.tx_hash)
-                transaction.utxos = api.transaction_utxos(outer_tx.tx_hash)
-                transaction.utxos.nonref_inputs = [
-                    i for i in transaction.utxos.inputs if not i.reference
-                ]
-                transaction.metadata = api.transaction_metadata(outer_tx.tx_hash)
-                transaction.redeemers = (
-                    api.transaction_redeemers(outer_tx.tx_hash)
-                    if transaction.redeemer_count
-                    else []
-                )
-                transaction.withdrawals = (
-                    api.transaction_withdrawals(outer_tx.tx_hash)
-                    if transaction.withdrawal_count
-                    else []
-                )
-                transaction.reward_amount = None
+                transaction_set.add(outer_tx.tx_hash)
+        result_list = []
+        for tx_hash in transaction_set:
+            transaction = api.transaction(tx_hash)
+            transaction.utxos = api.transaction_utxos(tx_hash)
+            transaction.utxos.nonref_inputs = [
+                i for i in transaction.utxos.inputs if not i.reference
+            ]
+            transaction.metadata = api.transaction_metadata(tx_hash)
+            transaction.redeemers = (
+                api.transaction_redeemers(tx_hash) if transaction.redeemer_count else []
+            )
+            transaction.withdrawals = (
+                api.transaction_withdrawals(tx_hash)
+                if transaction.withdrawal_count
+                else []
+            )
+            transaction.reward_amount = None
 
-                result_list.append(transaction)
+            result_list.append(transaction)
         return pd.Series(
             name="Transactions", data=result_list, index=[t.hash for t in result_list]
         ).sort_index()
@@ -447,6 +448,5 @@ class AccountPandasDumper:
             ]
         )
         frame = frame.join(balance)
-        # frame.drop_duplicates(inplace=True)
         frame.sort_values(by=frame.columns[0], inplace=True)
         return frame
