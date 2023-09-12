@@ -17,7 +17,7 @@ from typing import (
 import pandas as pd
 import numpy as np
 from blockfrost import BlockFrostApi
-from blockfrost.utils import Namespace
+import blockfrost.utils
 
 
 class AccountData:
@@ -44,9 +44,9 @@ class AccountData:
         self.own_addresses: FrozenSet[str] = self._own_addresses(api)
         self.rewards = rewards
         if self.rewards:
-            self.reward_transactions: pd.Series = self._reward_transactions(api)
-        self.transactions: pd.Series = self._transaction_data(api)
-        self.assets: pd.DataFrame = self._assets_from_transactions(api)
+            self.reward_transactions = self._reward_transactions(api)
+        self.transactions = self._transaction_data(api)
+        self.assets = self._assets_from_transactions(api)
 
     def _own_addresses(self, api: BlockFrostApi) -> FrozenSet[str]:
         return frozenset(
@@ -91,13 +91,17 @@ class AccountData:
                 transaction.reward_amount = None
 
                 result_list.append(transaction)
-        return pd.Series(name="Transactions", data=result_list)
+        return pd.Series(
+            name="Transactions", data=result_list, index=[t.hash for t in result_list]
+        ).sort_index()
 
     @classmethod
-    def _fix_api_asset(cls, asset_id: str, asset: Namespace) -> Namespace:
+    def _fix_api_asset(
+        cls, asset_id: str, asset: blockfrost.utils.Namespace
+    ) -> blockfrost.utils.Namespace:
         asset.asset_id = asset_id
         if not hasattr(asset, "metadata") or asset.metadata is None:
-            asset.metadata = Namespace()
+            asset.metadata = blockfrost.utils.Namespace()
         if not (hasattr(asset.metadata, "name") and asset.metadata.name):
             asset.raw_name = asset_id.removeprefix(asset.policy_id)
         else:
@@ -106,16 +110,16 @@ class AccountData:
             asset.metadata.decimals = 0
         return asset
 
-    def _assets_from_transactions(self, api: BlockFrostApi) -> pd.DataFrame:
+    def _assets_from_transactions(self, api: BlockFrostApi) -> pd.Series:
         all_asset_ids: Set[str] = set()
-        for tx_obj in self.transactions:
+        for tx_obj in self.transactions:  # pylint: disable=not-an-iterable
             if hasattr(tx_obj, "utxos"):
                 all_asset_ids.update(
                     [a.unit for i in tx_obj.utxos.inputs for a in i.amount]
                     + [a.unit for i in tx_obj.utxos.outputs for a in i.amount]
                 )
-        lovelace_asset_obj = Namespace()
-        lovelace_asset_obj.metadata = Namespace()
+        lovelace_asset_obj = blockfrost.utils.Namespace()
+        lovelace_asset_obj.metadata = blockfrost.utils.Namespace()
         lovelace_asset_obj.metadata.name = "ADA"
         lovelace_asset_obj.metadata.decimals = self.LOVELACE_DECIMALS
         lovelace_asset_obj.policy_id = ""
@@ -129,7 +133,7 @@ class AccountData:
             )
             for asset in all_asset_ids
         ]
-        assets = pd.DataFrame(
+        return pd.Series(
             data=asset_list,
             index=pd.MultiIndex.from_tuples(
                 [
@@ -137,20 +141,21 @@ class AccountData:
                     for asset in asset_list
                 ]
             ),
-        )
-        return assets
+        ).sort_index()
 
     @staticmethod
     def _reward_transaction(
-        api: BlockFrostApi, reward: Namespace, pools: Mapping[str, Namespace]
-    ) -> Namespace:
-        result = Namespace()
+        api: BlockFrostApi,
+        reward: blockfrost.utils.Namespace,
+        pools: Mapping[str, blockfrost.utils.Namespace],
+    ) -> blockfrost.utils.Namespace:
+        result = blockfrost.utils.Namespace()
         result.tx_hash = None
         pool_name = (
             pools[reward.pool_id].name if reward.pool_id in pools else reward.pool_id
         )
         result.metadata = [
-            Namespace(
+            blockfrost.utils.Namespace(
                 label="674",
                 json_metadata=f"Reward: {reward.type} - {pool_name} - {reward.epoch}",
             )
@@ -164,7 +169,7 @@ class AccountData:
         result.redeemers = []
         result.hash = None
         result.withdrawals = []
-        result.utxos = Namespace()
+        result.utxos = blockfrost.utils.Namespace()
         result.utxos.inputs = []
         result.utxos.outputs = []
         result.utxos.nonref_inputs = []
@@ -186,7 +191,11 @@ class AccountData:
             self._reward_transaction(api=api, reward=a_r, pools=pool_result_list)
             for a_r in reward_list
         ]
-        return pd.Series(name="Rewards", data=reward_result_list)
+        return pd.Series(
+            name="Rewards",
+            data=reward_result_list,
+            index=[t.hash for t in reward_result_list],
+        ).sort_index()
 
 
 TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
@@ -238,17 +247,17 @@ class AccountPandasDumper:
             )
         )
 
-    def _munge_metadata(self, namespace_obj) -> Any:
-        if isinstance(namespace_obj, Namespace):
+    def _munge_metadata(self, obj: blockfrost.utils.Namespace) -> Any:
+        if isinstance(obj, blockfrost.utils.Namespace):
             result = {}
-            for att in dir(namespace_obj):
+            for att in dir(obj):
                 if att.startswith("_") or att in (
                     "to_json",
                     "to_dict",
                 ):
                     continue
                 hex_name = self._is_hex_number(att)
-                value = getattr(namespace_obj, att)
+                value = getattr(obj, att)
                 hex_value = isinstance(value, str) and self._is_hex_number(value)
                 if (hex_name and hex_value) and not self.unmute:
                     continue
@@ -257,16 +266,12 @@ class AccountPandasDumper:
                 if value:
                     result[out_att] = value
             return result
-        elif (
-            isinstance(namespace_obj, str)
-            and self._is_hex_number(namespace_obj)
-            and not self.unmute
-        ):
+        elif isinstance(obj, str) and self._is_hex_number(obj) and not self.unmute:
             return {}
         else:
-            return namespace_obj
+            return obj
 
-    def _format_message(self, tx_obj: Namespace) -> str:
+    def _format_message(self, tx_obj: blockfrost.utils.Namespace) -> str:
         result: List[str] = []
         for metadata_key in tx_obj.metadata:
             if metadata_key.label in self.known_dict[self.LABELS_KEY]:
@@ -323,10 +328,10 @@ class AccountPandasDumper:
         return np.longlong(self.data.assets[asset].metadata.decimals)
 
     def _asset_tuple(self, asset_id: str) -> Tuple:
-        asset = self.data.assets[0][(asset_id,)][0]
+        asset = self.data.assets[(asset_id,)].iloc[0]
         return (asset.policy_id, asset.raw_name)
 
-    def _transaction_balance(self, transaction: Namespace) -> Any:
+    def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[
             self._asset_tuple(self.data.LOVELACE_ASSET) + ("fees", True)
@@ -369,7 +374,7 @@ class AccountPandasDumper:
         return result
 
     @staticmethod
-    def _extract_timestamp(transaction: Namespace) -> Any:
+    def _extract_timestamp(transaction: blockfrost.utils.Namespace) -> Any:
         return np.datetime64(
             datetime.datetime.fromtimestamp(transaction.block_time)
         ) + (int(transaction.index) * TRANSACTION_OFFSET)
@@ -386,7 +391,7 @@ class AccountPandasDumper:
             x[:2]
             for x in balance.xs(True, level=-1, axis=1).columns
         )
-
+        balance.sort_index(inplace=True, axis=1)
         balance.drop(assets_to_drop, axis=1, inplace=True)
 
     def _drop_muted_policies(self, balance: pd.DataFrame) -> None:
@@ -399,6 +404,7 @@ class AccountPandasDumper:
             policies_to_drop = frozenset(
                 [x[0] for x in balance.columns if x[0] in policies_to_mute]
             )
+            balance.sort_index(inplace=True, axis=1)
             balance.drop(policies_to_drop, axis=1, inplace=True)
 
     def _relabel_assets(self, balance: pd.DataFrame) -> None:
@@ -442,15 +448,15 @@ class AccountPandasDumper:
 
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         balance_column_index_length = len(balance.columns[0])
-
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
+        frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
             [
                 ("metadata", c) + (balance_column_index_length - 2) * ("",)
                 for c in frame.columns
             ]
         )
-        frame = frame.merge(balance, left_index=True, right_index=True)
+        frame = frame.join(balance)
         frame.drop_duplicates(inplace=True)
         frame.sort_values(by=frame.columns[0], inplace=True)
         return frame
