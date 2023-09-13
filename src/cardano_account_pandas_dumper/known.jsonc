@@ -95,6 +95,7 @@
         "8a7b0a43a169218fb66996c3945f53d7712eae9e31db193adb55663f": "NFT test",
         "909133088303c49f3a30f1cc8ed553a73857a29779f6c6561cd8093f": "MuesliSwap NFT Policy v2",
         "97da12de04a6b527cc3b3469c5e5485cf258dfd1021f12e728f2e714": "INDY IASSET NFT",
+        "9a9693a9a37912a5097918f97918d15240c92ab729a0b7c4aa144d77": "Sundae policy",
         "af3d70acf4bd5b3abb319a7d75c89fb3e56eafcdd46b2e9b57a2557f": "MuesliSwap NFT",
         "d195ca7db29f0f13a00cac7fca70426ff60bad4e1e87d3757fae8484": "Minswap LP NFT 1",
         "de9b756719341e79785aa13c164e7fe68c189ed04d61c9876b2fe53f": "MuesliSwap Factory Policy v2",
@@ -102,8 +103,7 @@
         "e4214b7cce62ac6fbba385d164df48e157eae5863521b4b67ca71d86": "Minswap NFT",
         "e8a447d4e19016ca2aa74d20b4c4de87adb1f21dfb5493bf2d7281a6": "Sundae scooper",
         "f66d78b4a3cb3d37afa0ec36461e51ecbde00f26c8f0a68f94b69880": "Indigo",
-        "fd0d72fafee1d230a74c31ac503a192abd5b71888ae3f94128c1e634": "INDY staking NFT",
-        "9a9693a9a37912a5097918f97918d15240c92ab729a0b7c4aa144d77": "Sundae policy",
+        "fd0d72fafee1d230a74c31ac503a192abd5b71888ae3f94128c1e634": "INDY staking NFT"
     },
     // Known script hashes
     "scripts": {
