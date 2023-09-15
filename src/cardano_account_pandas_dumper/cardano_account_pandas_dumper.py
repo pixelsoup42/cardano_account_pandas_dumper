@@ -449,7 +449,6 @@ class AccountPandasDumper:
         message = transactions.rename("message").map(self._format_message)
         balance = pd.DataFrame(
             data=[self._transaction_balance(x) for x in transactions],
-            dtype=pd.Int64Dtype,
         )
         self._drop_foreign_assets(balance)
         if not self.args.unmute:
@@ -458,7 +457,7 @@ class AccountPandasDumper:
             balance.drop(labels=False, axis=1, level=4, inplace=True)
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        balance = balance.groupby(axis=1, level=(0, 1, 3)).sum(numeric_only=True)
+        balance = balance.T.groupby(level=(0, 1, 3)).sum().T
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
