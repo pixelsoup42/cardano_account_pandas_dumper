@@ -211,8 +211,31 @@ class AccountPandasDumper:
         self.data = data
         self.known_dict = known_dict
         self.args = args
-        self.addresses = pd.Series(known_dict.get("addresses", {}))
-        self.policies = pd.Series(known_dict.get("policies", {}))
+        self.address_names = (
+            pd.concat(
+                [
+                    pd.Series(
+                        known_dict.get("addresses", {}),
+                    ),
+                    pd.Series({a: " wallet" for a in self.data.own_addresses}),
+                ]
+            )
+            if not args.raw_values
+            else pd.Series()
+        )
+        self.policy_names = (
+            pd.Series(known_dict.get("policies", {}))
+            if not args.raw_values
+            else pd.Series()
+        )
+        self.asset_names = pd.Series(
+            {
+                asset.asset_id: self._decode_asset_name(asset.raw_name)
+                if not args.raw_values
+                else self._truncate(asset.raw_name)
+                for asset in self.data.assets
+            }
+        )
         self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
         self.scripts = pd.Series(known_dict.get("scripts", {}))
         self.labels = pd.Series(known_dict.get("labels", {}))
@@ -220,9 +243,16 @@ class AccountPandasDumper:
     def _truncate(self, value: str) -> str:
         return (
             value
-            if self.args.no_truncate
-            else (value[: self.args.truncate_length] + "...")
+            if self.args.no_truncate or len(value) <= self.args.truncate_length
+            else ("..." + value[-self.args.truncate_length :])
         )
+
+    def _decode_asset_name(self, asset_raw_name: str) -> str:
+        try:
+            return bytes.fromhex(asset_raw_name).decode()
+        except UnicodeDecodeError:
+            pass
+        return self._truncate(asset_raw_name)
 
     @staticmethod
     def _is_hex_number(num: Any) -> bool:
@@ -297,34 +327,29 @@ class AccountPandasDumper:
     def _format_script(self, script: str) -> str:
         return self.scripts.get(script, self._truncate(script))
 
-    def _format_address(self, address: str) -> str:
-        return self.addresses.get(address, self._truncate(address))
-
-    def _format_asset_name(self, name: str) -> str:
-        try:
-            return bytes.fromhex(name).decode()
-        except UnicodeDecodeError:
-            return name
-
     def _format_policy(self, policy: str) -> Optional[str]:
-        return self.policies.get(policy, self._truncate(policy))
+        return self.policy_names.get(policy, self._truncate(policy))
 
     def _decimals_for_asset(self, asset: str) -> np.longlong:
         return np.longlong(self.data.assets[asset].metadata.decimals)
 
     def _asset_tuple(self, asset_id: str) -> Tuple:
         asset = self.data.assets[(asset_id,)].iloc[0]
-        return (asset.policy_id, asset.raw_name)
+        return (
+            self._format_policy(asset.policy_id),
+            self.asset_names.get(asset_id),
+        )
 
     def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
+        # Index: (policy,asset,address,address_name,own)
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[
-            self._asset_tuple(self.data.LOVELACE_ASSET) + ("fees", True)
+            self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " fees", True)
         ] = np.longlong(transaction.fees)
         result[
-            self._asset_tuple(self.data.LOVELACE_ASSET) + ("deposit", True)
+            self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " deposit", True)
         ] = np.longlong(transaction.deposit)
-        result[self._asset_tuple(self.data.LOVELACE_ASSET) + ("rewards", True)] = (
+        result[self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " rewards", True)] = (
             np.negative(
                 functools.reduce(
                     np.add,
@@ -342,6 +367,12 @@ class AccountPandasDumper:
                         self._asset_tuple(amount.unit)
                         + (
                             utxo.address,
+                            self.address_names.get(
+                                utxo.address,
+                                self._truncate(utxo.address)
+                                if self.args.raw_values
+                                else "other",
+                            ),
                             utxo.address in self.data.own_addresses,
                         )
                     ] -= np.longlong(amount.quantity)
@@ -352,6 +383,12 @@ class AccountPandasDumper:
                     self._asset_tuple(amount.unit)
                     + (
                         utxo.address,
+                        self.address_names.get(
+                            utxo.address,
+                            self._truncate(utxo.address)
+                            if self.args.raw_values
+                            else "other",
+                        ),
                         utxo.address in self.data.own_addresses,
                     )
                 ] += np.longlong(amount.quantity)
@@ -386,13 +423,6 @@ class AccountPandasDumper:
         balance.sort_index(inplace=True, axis=1)
         balance.drop(policies_to_drop, axis=1, inplace=True)
 
-    def _relabel_assets(self, balance: pd.DataFrame) -> None:
-        new_columns: List[Tuple] = [
-            (self._format_policy(x[0]), self._format_asset_name(x[1])) + tuple(x[2:])
-            for x in balance.columns
-        ]
-        balance.columns = pd.MultiIndex.from_tuples(new_columns)
-
     def make_transaction_frame(self) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
@@ -425,12 +455,10 @@ class AccountPandasDumper:
         if not self.args.unmute:
             self._drop_muted_policies(balance)
         if self.args.detail_level == 1:
-            balance.drop(labels=False, axis=1, level=3, inplace=True)
-        if not self.args.raw_values:
-            self._relabel_assets(balance)
-
+            balance.drop(labels=False, axis=1, level=4, inplace=True)
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+        balance = balance.groupby(axis=1, level=(0, 1, 3)).sum(numeric_only=True)
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
