@@ -350,17 +350,21 @@ class AccountPandasDumper:
         result[
             self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " deposit", True)
         ] = np.longlong(transaction.deposit)
-        result[self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " rewards", True)] = (
-            np.negative(
+        if transaction.reward_amount:
+            result[
+                self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " rewards", True)
+            ] = np.longlong(transaction.reward_amount)
+        if transaction.withdrawals:
+            result[
+                self._asset_tuple(self.data.LOVELACE_ASSET)
+                + ("", " rewards withdrawal", True)
+            ] = np.negative(
                 functools.reduce(
                     np.add,
                     [np.longlong(w.amount) for w in transaction.withdrawals],
                     np.longlong(0),
                 )
             )
-            if not transaction.reward_amount
-            else np.longlong(transaction.reward_amount)
-        )
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
