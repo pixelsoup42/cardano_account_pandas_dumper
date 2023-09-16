@@ -331,17 +331,18 @@ class AccountPandasDumper:
         return self.policy_names.get(policy, self._truncate(policy))
 
     def _decimals_for_asset(self, asset: str) -> np.longlong:
-        return np.longlong(self.data.assets[asset].metadata.decimals)
+        return np.longlong(self.data.assets[(asset,)].iloc(0)[0].metadata.decimals)
 
     def _asset_tuple(self, asset_id: str) -> Tuple:
         asset = self.data.assets[(asset_id,)].iloc[0]
         return (
             self._format_policy(asset.policy_id),
             self.asset_names.get(asset_id),
+            self._decimals_for_asset(asset_id),
         )
 
     def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
-        # Index: (policy,asset,address,address_name,own)
+        # Index: (policy,asset,decimals, address,address_name,own)
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[
             self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " fees", True)
@@ -449,15 +450,18 @@ class AccountPandasDumper:
         message = transactions.rename("message").map(self._format_message)
         balance = pd.DataFrame(
             data=[self._transaction_balance(x) for x in transactions],
+            dtype="Int64",
         )
         self._drop_foreign_assets(balance)
         if not self.args.unmute:
             self._drop_muted_policies(balance)
         if self.args.detail_level == 1:
-            balance.drop(labels=False, axis=1, level=4, inplace=True)
+            balance.drop(labels=False, axis=1, level=5, inplace=True)
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        balance = balance.T.groupby(level=(0, 1, 3)).sum().T
+        balance = balance.T.groupby(level=(0, 1, 2, 4)).sum(numeric_only=True).T
+
+        # balance = pd.concat([balance[c] * np.exp()])
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
