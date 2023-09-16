@@ -206,6 +206,8 @@ class AccountPandasDumper:
     """Hold logic to convert an instance of AccountData to a Pandas dataframe."""
 
     TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
+    OWN_LABEL = "own"
+    OTHER_LABEL = "other"
 
     def __init__(self, data: AccountData, known_dict: Any, args: argparse.Namespace):
         self.data = data
@@ -345,19 +347,21 @@ class AccountPandasDumper:
         # Index: (policy,asset,decimals, address,address_name,own)
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[
-            self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " fees", True)
+            self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " fees", self.OWN_LABEL)
         ] = np.longlong(transaction.fees)
         result[
-            self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " deposit", True)
+            self._asset_tuple(self.data.LOVELACE_ASSET)
+            + ("", " deposit", self.OWN_LABEL)
         ] = np.longlong(transaction.deposit)
         if transaction.reward_amount:
             result[
-                self._asset_tuple(self.data.LOVELACE_ASSET) + ("", " rewards", True)
+                self._asset_tuple(self.data.LOVELACE_ASSET)
+                + ("", " rewards", self.OWN_LABEL)
             ] = np.longlong(transaction.reward_amount)
         if transaction.withdrawals:
             result[
                 self._asset_tuple(self.data.LOVELACE_ASSET)
-                + ("", " rewards withdrawal", True)
+                + ("", " rewards withdrawal", self.OWN_LABEL)
             ] = np.negative(
                 functools.reduce(
                     np.add,
@@ -376,9 +380,11 @@ class AccountPandasDumper:
                                 utxo.address,
                                 self._truncate(utxo.address)
                                 if self.args.raw_values
-                                else "other",
+                                else self.OTHER_LABEL,
                             ),
-                            utxo.address in self.data.own_addresses,
+                            self.OWN_LABEL
+                            if utxo.address in self.data.own_addresses
+                            else self.OTHER_LABEL,
                         )
                     ] -= np.longlong(amount.quantity)
 
@@ -392,9 +398,11 @@ class AccountPandasDumper:
                             utxo.address,
                             self._truncate(utxo.address)
                             if self.args.raw_values
-                            else "other",
+                            else self.OTHER_LABEL,
                         ),
-                        utxo.address in self.data.own_addresses,
+                        self.OWN_LABEL
+                        if utxo.address in self.data.own_addresses
+                        else self.OTHER_LABEL,
                     )
                 ] += np.longlong(amount.quantity)
 
@@ -412,11 +420,11 @@ class AccountPandasDumper:
         assets_to_drop = frozenset(
             # Assets that touch other addresses
             x[:2]
-            for x in balance.xs(False, level=-1, axis=1).columns
+            for x in balance.xs(self.OTHER_LABEL, level=-1, axis=1).columns
         ) - frozenset(
             # Assets that touch own addresses
             x[:2]
-            for x in balance.xs(True, level=-1, axis=1).columns
+            for x in balance.xs(self.OWN_LABEL, level=-1, axis=1).columns
         )
         balance.sort_index(inplace=True, axis=1)
         balance.drop(assets_to_drop, axis=1, inplace=True)
@@ -452,23 +460,7 @@ class AccountPandasDumper:
         timestamp = transactions.rename("timestamp").map(self._extract_timestamp)
         tx_hash = transactions.rename("hash").map(lambda x: x.hash)
         message = transactions.rename("message").map(self._format_message)
-        balance = pd.DataFrame(
-            data=[self._transaction_balance(x) for x in transactions],
-            dtype="Int64",
-        )
-        self._drop_foreign_assets(balance)
-        if not self.args.unmute:
-            self._drop_muted_policies(balance)
-        if self.args.detail_level == 1:
-            balance.drop(labels=False, axis=1, level=5, inplace=True)
-        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
-        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        balance = balance.T.groupby(level=(0, 1, 2, 4)).sum(numeric_only=True).T
-
-        balance = balance * [
-            np.float_power(10, np.negative(c[2])) for c in balance.columns
-        ]
-        balance.columns = balance.columns.droplevel(2)
+        balance = self.make_balance_frame(transactions)
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
@@ -480,3 +472,29 @@ class AccountPandasDumper:
         frame = frame.join(balance)
         frame.sort_values(by=frame.columns[0], inplace=True)
         return frame
+
+    def make_balance_frame(self, transactions):
+        balance = pd.DataFrame(
+            data=[self._transaction_balance(x) for x in transactions],
+            dtype="Int64",
+        )
+        self._drop_foreign_assets(balance)
+        if not self.args.unmute:
+            self._drop_muted_policies(balance)
+        if self.args.detail_level == 1:
+            balance.drop(labels=self.OTHER_LABEL, axis=1, level=5, inplace=True)
+        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+        balance = (
+            balance.T.groupby(
+                level=(0, 1, 2, 4) if not self.args.raw_values else (0, 1, 2, 4, 5)
+            )
+            .sum(numeric_only=True)
+            .T
+        )
+
+        balance = balance * [
+            np.float_power(10, np.negative(c[2])) for c in balance.columns
+        ]
+        balance.columns = balance.columns.droplevel(2)
+        return balance
