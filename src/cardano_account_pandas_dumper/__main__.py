@@ -6,6 +6,7 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
+import pandas as pd
 from blockfrost import ApiError, BlockFrostApi
 
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
@@ -159,7 +160,13 @@ def main():
     reporter = AccountPandasDumper(
         data=data_from_api, known_dict=known_dict_from_file, args=args
     )
-    dataframe = reporter.make_transaction_frame()
+    transactions = pd.concat(
+        objs=[
+            data_from_api.transactions,
+            pd.Series() if args.no_rewards else data_from_api.reward_transactions,
+        ],
+    ).rename("transactions")
+    dataframe = reporter.make_transaction_frame(transactions)
     if args.pandas_output:
         try:
             dataframe.to_pickle(args.pandas_output)

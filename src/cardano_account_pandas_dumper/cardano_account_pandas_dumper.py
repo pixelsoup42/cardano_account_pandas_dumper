@@ -436,7 +436,12 @@ class AccountPandasDumper:
         balance.sort_index(inplace=True, axis=1)
         balance.drop(policies_to_drop, axis=1, inplace=True)
 
-    def make_transaction_frame(self) -> pd.DataFrame:
+    def make_transaction_frame(
+        self,
+        transactions: pd.Series,
+        with_tx_hash: bool = True,
+        with_tx_message: bool = True,
+    ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
         # Add total line at the bottom
@@ -451,17 +456,13 @@ class AccountPandasDumper:
         #         )
         #     )
         # outputs.loc["Total"] = total
-        transactions = pd.concat(
-            objs=[
-                self.data.transactions,
-                pd.Series() if self.args.no_rewards else self.data.reward_transactions,
-            ],
-        ).rename("transactions")
-        timestamp = transactions.rename("timestamp").map(self._extract_timestamp)
-        tx_hash = transactions.rename("hash").map(lambda x: x.hash)
-        message = transactions.rename("message").map(self._format_message)
+        columns = [transactions.rename("timestamp").map(self._extract_timestamp)]
+        if with_tx_hash:
+            columns.append(transactions.rename("hash").map(lambda x: x.hash))
+        if with_tx_message:
+            columns.append(transactions.rename("message").map(self._format_message))
         balance = self.make_balance_frame(transactions)
-        frame = pd.concat([timestamp, tx_hash, message], axis=1)
+        frame = pd.concat(columns, axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
             [
@@ -474,6 +475,7 @@ class AccountPandasDumper:
         return frame
 
     def make_balance_frame(self, transactions):
+        """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
             data=[self._transaction_balance(x) for x in transactions],
             dtype="Int64",
