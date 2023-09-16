@@ -2,9 +2,17 @@
     // Known addresses
     "addresses": {
         "addr1v82lk3a7uln834rk0pjtszfnvvfhtdyc37ja7lvhxqmxalcxqnwsn": "CoinBase",
+        "addr1v83gh2sjr92d7x73mczk94sh5gztutxp7wqhwy9j6jz32hqnm9n9p": "CoinBase",
+        "addr1v8v3auqmw0eszza3ww29ea2pwftuqrqqyu26zvzjq9dt2ncydzvs5": "CoinBase",
+        "addr1v929zljj5jc24zptkhqcr3873krkdk8de4xzut79r2r0x5ss7x2fc": "CoinBase",
         "addr1v95sf69jcfhnmknvffwmfvlvnccatqwfjcyh0nlfc6gh5scta2yzg": "CoinBase",
+        "addr1v9edgwtmte2chm4u4rva8dx3puwdwxq6nnj7pd0hvjkdvuq59z6aw": "CoinBase",
+        "addr1v9h2m9lyg4awrlm2wkqlm6tjqf8cup5snxgnw9eskvdzclcyxl2jf": "CoinBase",
         "addr1v9u7va2sktlnz8dp3qadpnxxlv4m03672jy6elmntlxxs7q9nnwl9": "CoinBase",
+        "addr1vxkpskjw3umzqd7vudhq23gm3mx6fda8jh0kp5qf7vql9gs4fw7ve": "CoinBase",
         "addr1vydqq7fww4sga05jvtfckw3z9z8n8n2zxj0fyelvdl86acqhd9l70": "CoinBase",
+        "addr1vypr00ss7hkqejmvh53xkyf0p9q0a4z2uprxmx6njc463vgst3pe4": "CoinBase",
+        "addr1vyrgfvphe5xgefvj0efsucpcc574pvuxwzkxpve3qhkp2xq3j7tjn": "CoinBase",
         "addr1w80ptp0qgmcklhmeweesqgeurtlma8fsxsr9dt8au30fzss0czhl9": "Indigo Protocol (Stability pool)",
         "addr1w849xkxel6pvc7kcmc88dd82hkz32fjq3ega42wchd93xlgqxxpv5": "Indigo Protocol (CDP creator)",
         "addr1w89s3lfv7gkugker5llecq6x3k2vjvfnvp4692laeqe6w6s93vj3j": "Explosif (Direct sale)",
