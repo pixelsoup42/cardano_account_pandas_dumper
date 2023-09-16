@@ -461,7 +461,10 @@ class AccountPandasDumper:
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         balance = balance.T.groupby(level=(0, 1, 2, 4)).sum(numeric_only=True).T
 
-        # balance = pd.concat([balance[c] * np.exp()])
+        balance = balance * [
+            np.float_power(10, np.negative(c[2])) for c in balance.columns
+        ]
+        balance.columns = balance.columns.droplevel(2)
         frame = pd.concat([timestamp, tx_hash, message], axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
