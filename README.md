@@ -100,16 +100,11 @@ This flag lets you specify another truncation length.
 : Do not truncate numerical identifiers.
 If you need numerical hex values to not be truncated at all (see `--truncate_length`above), specify this flag.
 
-`--raw_asset`
-: Add header row with concatenation of policy_id and hex-encoded asset_name.
-This is useful if you need to look up a specific asset.
+`--raw_values`
+: Do not translate policies, assets and addresses to their names, keep them as hex.
 
-## Calculations and precision
-
-All calculations are done using Python decimals to preserve accuracy.
-However when importing into a spreadsheet, the values are usually converted to floats and some rounding errors can occur.
-This is a spreadsheet issue, there isn't much that can be done by this tool to avoid it.
-If you want to preserve accuracy the best way is probably to write a serialized [Pandas](https://pandas.pydata.org/) dataframe and write some code to process it.
+`--no_rewards`
+: Do not add pseudo-transactions with rewards for each epoch.
 
 ## Possible improvements
 
@@ -152,7 +147,6 @@ Here is a comparison table for both projects (please submit corrections if you t
 | Knows about assets other than ADA |✔️|❌|
 | Knows about DeFI contract addresses |✔️[^2]|❌|
 | Extracts useful information from tx metadata |✔️|❌|
-| Decimal arithmetic for absolute precision |✔️|❌|
 | .xlsx output |❌[^3]|✔️|
 | [Pandas](https://pandas.pydata.org/) compatible |✔️|❌|
 | Ready to use after one-liner install command |✔️|❌|
