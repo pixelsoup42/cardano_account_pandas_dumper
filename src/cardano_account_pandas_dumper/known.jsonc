@@ -84,6 +84,7 @@
     "policies": {
         "0029cb7c88c7567b63d1a512c0ed626aa169688ec980730c0473b913": "Sundaeswap LP",
         "026a18d04a0c642759bb3d83b12e3344894e5c1c7b2aeb1a2113a570": "Wingriders Factory/Liquidity token v1",
+        "078eafce5cd7edafdf63900edef2c1ea759e77f30ca81d6bbdeec924": "YUMMI Policy",
         "0be55d262b29f564998ff81efe21bdc0022621c12f15af08d0f2ddb1": "Minswap LP NFT 2",
         "13aa2accf2e1561723aa26871e071fdf32c867cff7e7d50ad470d62f": "Minswap LP NFT 2",
         "21ca2902ad0406bc2ce361ad91157b3542544d86d4e3d3e3c43f1763": "VyFI NFT 1",
@@ -111,7 +112,17 @@
         "e4214b7cce62ac6fbba385d164df48e157eae5863521b4b67ca71d86": "Minswap NFT",
         "e8a447d4e19016ca2aa74d20b4c4de87adb1f21dfb5493bf2d7281a6": "Sundae scooper",
         "f66d78b4a3cb3d37afa0ec36461e51ecbde00f26c8f0a68f94b69880": "Indigo",
-        "fd0d72fafee1d230a74c31ac503a192abd5b71888ae3f94128c1e634": "INDY staking NFT"
+        "fd0d72fafee1d230a74c31ac503a192abd5b71888ae3f94128c1e634": "INDY staking NFT",
+        "1d7f33bd23d85e1a25d87d86fac4f199c3197a2f7afeb662a0f34e1e": "WMT Policy",
+        "25f0fc240e91bd95dcdaebd2ba7713fc5168ac77234a3d79449fc20c": "SOCIETY Policy",
+        "533bb94a8850ee3ccbe483106489399112b74c905342cb1792a797a0": "INDY Policy",
+        "6ac8ef33b510ec004fe11585f7c5a9f0c07f0c23428ab4f29c1d7d10": "MELD Policy",
+        "8a1cfae21368b8bebbbed9800fec304e95cce39a2a57dc35e2e3ebaa": "MILK Policy",
+        "8f9c32977d2bacb87836b64f7811e99734c6368373958da20172afba": "MYIELD Policy",
+        "8fef2d34078659493ce161a6c7fba4b56afefa8535296a5743f69587": "Lenfi DAO Policy",
+        "a0028f350aaabe0545fdcb56b039bfb08e4bb4d8c4d7c3c7d481c235": "HOSKY Policy",
+        "c0ee29a85b13209423b10447d3c2e6a50641a15c57770e27cb9d5073": "WRT Policy",
+        "f43a62fdc3965df486de8a0d32fe800963589c41b38946602a0dc535": "AGIX Policy"
     },
     // Known script hashes
     "scripts": {
