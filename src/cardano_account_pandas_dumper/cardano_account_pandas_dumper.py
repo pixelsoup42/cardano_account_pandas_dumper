@@ -333,7 +333,7 @@ class AccountPandasDumper:
         return self.policy_names.get(policy, self._truncate(policy))
 
     def _decimals_for_asset(self, asset: str) -> np.longlong:
-        return np.longlong(self.data.assets[(asset,)].iloc(0)[0].metadata.decimals)
+        return np.longlong(self.data.assets[(asset,)].iloc(0)[0].metadata.decimals or 0)
 
     def _asset_tuple(self, asset_id: str) -> Tuple:
         asset = self.data.assets[(asset_id,)].iloc[0]
@@ -441,26 +441,18 @@ class AccountPandasDumper:
         transactions: pd.Series,
         with_tx_hash: bool = True,
         with_tx_message: bool = True,
+        with_total: bool = True,
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
-        # Add total line at the bottom
-        # total = []
-        # for column in outputs.columns:
-        #     # Only NaN is float in the column
-        #     total.append(
-        #         functools.reduce(
-        #             self.np.longlong_context.add,
-        #             [a for a in outputs[column] if type(a) is type(np.longlong(0))],
-        #             np.longlong(0),
-        #         )
-        #     )
-        # outputs.loc["Total"] = total
+        total = [""]
         columns = [transactions.rename("timestamp").map(self._extract_timestamp)]
         if with_tx_hash:
             columns.append(transactions.rename("hash").map(lambda x: x.hash))
+            total.append("")
         if with_tx_message:
             columns.append(transactions.rename("message").map(self._format_message))
+            total.append("Total")
         balance = self.make_balance_frame(transactions)
         frame = pd.concat(columns, axis=1)
         frame.reset_index(drop=True, inplace=True)
@@ -472,6 +464,12 @@ class AccountPandasDumper:
         )
         frame = frame.join(balance)
         frame.sort_values(by=frame.columns[0], inplace=True)
+        # Add total line at the bottom
+        if with_total:
+            for column in balance.columns:
+                # Only NaN is float in the column
+                total.append(balance[column].sum())
+            frame.loc["Total"] = total
         return frame
 
     def make_balance_frame(self, transactions):
