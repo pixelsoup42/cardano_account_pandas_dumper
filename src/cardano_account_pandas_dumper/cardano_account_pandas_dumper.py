@@ -449,8 +449,8 @@ class AccountPandasDumper:
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
-        total = [""]
         columns = [transactions.rename("timestamp").map(self._extract_timestamp)]
+        total: List[Any] = [columns[0].max() + self.TRANSACTION_OFFSET]
         if with_tx_hash:
             columns.append(transactions.rename("hash").map(lambda x: x.hash))
             total.append("")
@@ -472,7 +472,9 @@ class AccountPandasDumper:
         if with_total:
             for column in balance.columns:
                 total.append(balance[column].sum())
-            frame.loc["Total"] = total
+            frame = pd.concat(
+                [frame, pd.DataFrame(data=[total], columns=frame.columns)]
+            )
         return frame
 
     def make_balance_frame(self, transactions):
@@ -497,6 +499,5 @@ class AccountPandasDumper:
         balance = balance * [
             np.float_power(10, np.negative(c[2])) for c in balance.columns
         ]
-        balance.replace(np.float64(0), pd.NA, inplace=True)
         balance.columns = balance.columns.droplevel(2)
         return balance

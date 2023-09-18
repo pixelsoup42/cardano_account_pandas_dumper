@@ -6,6 +6,7 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
+import numpy as np
 import pandas as pd
 from blockfrost import ApiError, BlockFrostApi
 
@@ -174,7 +175,7 @@ def main():
             warnings.warn(f"Failed to write pandas file: {exception}")
     if args.csv_output:
         try:
-            dataframe.to_csv(args.csv_output, index=False)
+            dataframe.replace(np.float64(0), pd.NA).to_csv(args.csv_output, index=False)
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
     print("Done.")
