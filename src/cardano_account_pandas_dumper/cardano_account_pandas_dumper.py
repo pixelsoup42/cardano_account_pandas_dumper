@@ -324,7 +324,12 @@ class AccountPandasDumper:
             ]
         ):
             result = ["(internal)"]
-        return " ".join(result).removeprefix("Message : ")
+        return (
+            " ".join(result)
+            .removeprefix("Message : ")
+            .removeprefix("{'msg': ['")
+            .removesuffix("']}")
+        )
 
     def _format_script(self, script: str) -> str:
         return self.scripts.get(script, self._truncate(script))
@@ -465,7 +470,6 @@ class AccountPandasDumper:
         # Add total line at the bottom
         if with_total:
             for column in balance.columns:
-                # Only NaN is float in the column
                 total.append(balance[column].sum())
             frame.loc["Total"] = total
         return frame
@@ -492,5 +496,6 @@ class AccountPandasDumper:
         balance = balance * [
             np.float_power(10, np.negative(c[2])) for c in balance.columns
         ]
+        balance.replace(np.float64(0), pd.NA, inplace=True)
         balance.columns = balance.columns.droplevel(2)
         return balance
