@@ -340,6 +340,7 @@ class AccountPandasDumper:
     def _decimals_for_asset(self, asset: str) -> np.longlong:
         return np.longlong(self.data.assets[(asset,)].iloc(0)[0].metadata.decimals or 0)
 
+    @functools.lru_cache(maxsize=10000)
     def _asset_tuple(self, asset_id: str) -> Optional[Tuple]:
         asset = self.data.assets[(asset_id,)].iloc[0]
         if not self.args.unmute and any(self.muted_policies == asset.policy_id):
