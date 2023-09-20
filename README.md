@@ -106,6 +106,29 @@ If you need numerical hex values to not be truncated at all (see `--truncate_len
 `--no_rewards`
 : Do not add pseudo-transactions with rewards for each epoch.
 
+## Output format
+
+### CSV
+
+column 0:
+transaction timestamp
+
+column 1;
+transaction hash
+
+column 2:
+transaction message
+
+columns 3-...:
+transaction input (positive) or output (negative) for each asset and address.
+
+row 0: asset policy
+row 1: asset name
+row 2: address
+
+If the `--raw_values` flag is passed, row 3 is inserted, with a value of `own`for own addresses (belonging to the specified staking addresses)
+and `other` for other addresses (if `--raw_values`is not passed, this information is on row 2).
+
 ## Possible improvements
 
 * The first obvious possible improvement would be to replace the static `--known_file` that lists the known addresses, policies and scripts with a dynamic API.
