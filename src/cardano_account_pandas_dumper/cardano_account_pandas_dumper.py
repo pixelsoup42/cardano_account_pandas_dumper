@@ -427,7 +427,6 @@ class AccountPandasDumper:
 
     def _drop_foreign_assets(self, balance: pd.DataFrame) -> None:
         # Drop assets that only touch foreign addresses
-        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         assets_to_drop = frozenset(
             # Assets that touch other addresses
             x[:2]
@@ -437,7 +436,6 @@ class AccountPandasDumper:
             x[:2]
             for x in balance.xs(self.OWN_LABEL, level=-1, axis=1).columns
         )
-        balance.sort_index(inplace=True, axis=1)
         balance.drop(assets_to_drop, axis=1, inplace=True)
 
     def make_transaction_frame(
@@ -483,11 +481,11 @@ class AccountPandasDumper:
             data=[self._transaction_balance(x) for x in transactions],
             dtype="Int64",
         )
+        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         self._drop_foreign_assets(balance)
         if self.args.detail_level == 1:
             balance.drop(labels=self.OTHER_LABEL, axis=1, level=5, inplace=True)
-        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
-        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         balance = (
             balance.T.groupby(
                 level=(0, 1, 2, 4) if not self.args.raw_values else (0, 1, 2, 4, 5)
