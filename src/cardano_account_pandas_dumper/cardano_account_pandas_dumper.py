@@ -239,6 +239,8 @@ class AccountPandasDumper:
             }
         )
         self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
+        self.pinned_policies = pd.Series(known_dict.get("pinned_policies", []))
+
         self.scripts = pd.Series(known_dict.get("scripts", {}))
         self.labels = pd.Series(known_dict.get("labels", {}))
 
@@ -341,9 +343,13 @@ class AccountPandasDumper:
         return np.longlong(self.data.assets[(asset,)].iloc(0)[0].metadata.decimals or 0)
 
     @functools.lru_cache(maxsize=10000)
-    def _asset_tuple(self, asset_id: str) -> Optional[Tuple]:
+    def _asset_tuple(self, asset_id: str, unmute: bool) -> Optional[Tuple]:
         asset = self.data.assets[(asset_id,)].iloc[0]
-        if not self.args.unmute and any(self.muted_policies == asset.policy_id):
+        if (
+            not unmute
+            and any(self.muted_policies == asset.policy_id)
+            and not any(self.pinned_policies == asset.policy_id)
+        ):
             return None
         return (
             self._format_policy(asset.policy_id),
@@ -354,7 +360,7 @@ class AccountPandasDumper:
     def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
         # Index: (policy,asset,decimals, address,address_name,own)
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        ada_asset = self._asset_tuple(self.data.LOVELACE_ASSET)
+        ada_asset = self._asset_tuple(self.data.LOVELACE_ASSET, True)
         assert ada_asset is not None, "Asset for ADA unexpectedly None"
         result[ada_asset + ("", " fees", self.OWN_LABEL)] = np.longlong(
             transaction.fees
@@ -379,7 +385,7 @@ class AccountPandasDumper:
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
-                    asset_tuple = self._asset_tuple(amount.unit)
+                    asset_tuple = self._asset_tuple(amount.unit, self.args.unmute)
                     if asset_tuple is not None:
                         result[
                             asset_tuple
@@ -399,7 +405,7 @@ class AccountPandasDumper:
 
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
-                asset_tuple = self._asset_tuple(amount.unit)
+                asset_tuple = self._asset_tuple(amount.unit, self.args.unmute)
                 if asset_tuple is not None:
                     result[
                         asset_tuple
@@ -435,6 +441,15 @@ class AccountPandasDumper:
             # Assets that touch own addresses
             x[:2]
             for x in balance.xs(self.OWN_LABEL, level=-1, axis=1).columns
+        ).union(
+            # Assets with pinned policies
+            frozenset(
+                [
+                    self._asset_tuple(asset.asset_id, True)[:2]  # type: ignore[index]
+                    for asset in self.data.assets
+                    if any(self.pinned_policies == asset.policy_id)
+                ]
+            )
         )
         balance.drop(assets_to_drop, axis=1, inplace=True)
 
