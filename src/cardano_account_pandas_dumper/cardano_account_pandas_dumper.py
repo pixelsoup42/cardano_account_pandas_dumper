@@ -418,7 +418,7 @@ class AccountPandasDumper:
             # Assets with muted policies
             frozenset(
                 [
-                    (asset.asset_id,)
+                    asset.asset_id
                     for asset in self.data.assets
                     if any(self.muted_policies == asset.policy_id)
                 ]
@@ -431,7 +431,7 @@ class AccountPandasDumper:
             # Assets with pinned policies
             frozenset(
                 [
-                    (asset.asset_id,)
+                    asset.asset_id
                     for asset in self.data.assets
                     if any(self.pinned_policies == asset.policy_id)
                 ]
