@@ -342,39 +342,22 @@ class AccountPandasDumper:
     def _decimals_for_asset(self, asset: str) -> np.longlong:
         return np.longlong(self.data.assets[(asset,)].iloc(0)[0].metadata.decimals or 0)
 
-    @functools.lru_cache(maxsize=10000)
-    def _asset_tuple(self, asset_id: str, unmute: bool) -> Optional[Tuple]:
-        asset = self.data.assets[(asset_id,)].iloc[0]
-        if (
-            not unmute
-            and any(self.muted_policies == asset.policy_id)
-            and not any(self.pinned_policies == asset.policy_id)
-        ):
-            return None
-        return (
-            self._format_policy(asset.policy_id),
-            self.asset_names.get(asset_id),
-            self._decimals_for_asset(asset_id),
-        )
-
     def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
-        # Index: (policy,asset,decimals, address,address_name,own)
+        # Index: (asset_id, address_name, own)
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        ada_asset = self._asset_tuple(self.data.LOVELACE_ASSET, True)
-        assert ada_asset is not None, "Asset for ADA unexpectedly None"
-        result[ada_asset + ("", " fees", self.OWN_LABEL)] = np.longlong(
+        result[(self.data.LOVELACE_ASSET, " fees", self.OWN_LABEL)] = np.longlong(
             transaction.fees
         )
-        result[ada_asset + ("", " deposit", self.OWN_LABEL)] = np.longlong(
+        result[(self.data.LOVELACE_ASSET, " deposit", self.OWN_LABEL)] = np.longlong(
             transaction.deposit
         )
         if transaction.reward_amount:
-            result[ada_asset + ("", " rewards", self.OWN_LABEL)] = np.longlong(
-                transaction.reward_amount
-            )
+            result[
+                (self.data.LOVELACE_ASSET, " rewards", self.OWN_LABEL)
+            ] = np.longlong(transaction.reward_amount)
         if transaction.withdrawals:
             result[
-                ada_asset + ("", " rewards withdrawal", self.OWN_LABEL)
+                (self.data.LOVELACE_ASSET, " rewards withdrawal", self.OWN_LABEL)
             ] = np.negative(
                 functools.reduce(
                     np.add,
@@ -385,32 +368,9 @@ class AccountPandasDumper:
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
-                    asset_tuple = self._asset_tuple(amount.unit, self.args.unmute)
-                    if asset_tuple is not None:
-                        result[
-                            asset_tuple
-                            + (
-                                utxo.address,
-                                self.address_names.get(
-                                    utxo.address,
-                                    self._truncate(utxo.address)
-                                    if self.args.raw_values
-                                    else self.OTHER_LABEL,
-                                ),
-                                self.OWN_LABEL
-                                if utxo.address in self.data.own_addresses
-                                else self.OTHER_LABEL,
-                            )
-                        ] -= np.longlong(amount.quantity)
-
-        for utxo in transaction.utxos.outputs:
-            for amount in utxo.amount:
-                asset_tuple = self._asset_tuple(amount.unit, self.args.unmute)
-                if asset_tuple is not None:
                     result[
-                        asset_tuple
-                        + (
-                            utxo.address,
+                        (
+                            amount.unit,
                             self.address_names.get(
                                 utxo.address,
                                 self._truncate(utxo.address)
@@ -421,7 +381,24 @@ class AccountPandasDumper:
                             if utxo.address in self.data.own_addresses
                             else self.OTHER_LABEL,
                         )
-                    ] += np.longlong(amount.quantity)
+                    ] -= np.longlong(amount.quantity)
+
+        for utxo in transaction.utxos.outputs:
+            for amount in utxo.amount:
+                result[
+                    (
+                        amount.unit,
+                        self.address_names.get(
+                            utxo.address,
+                            self._truncate(utxo.address)
+                            if self.args.raw_values
+                            else self.OTHER_LABEL,
+                        ),
+                        self.OWN_LABEL
+                        if utxo.address in self.data.own_addresses
+                        else self.OTHER_LABEL,
+                    )
+                ] += np.longlong(amount.quantity)
 
         return result
 
@@ -431,21 +408,30 @@ class AccountPandasDumper:
             datetime.datetime.fromtimestamp(transaction.block_time)
         ) + (int(transaction.index) * cls.TRANSACTION_OFFSET)
 
-    def _drop_foreign_assets(self, balance: pd.DataFrame) -> None:
+    def _drop_muted_assets(self, balance: pd.DataFrame) -> None:
         # Drop assets that only touch foreign addresses
         assets_to_drop = frozenset(
             # Assets that touch other addresses
-            x[:2]
+            x[:1]
             for x in balance.xs(self.OTHER_LABEL, level=-1, axis=1).columns
+        ).union(
+            # Assets with muted policies
+            frozenset(
+                [
+                    (asset.asset_id,)
+                    for asset in self.data.assets
+                    if any(self.muted_policies == asset.policy_id)
+                ]
+            )
         ) - frozenset(
             # Assets that touch own addresses
-            x[:2]
+            x[:1]
             for x in balance.xs(self.OWN_LABEL, level=-1, axis=1).columns
         ).union(
             # Assets with pinned policies
             frozenset(
                 [
-                    self._asset_tuple(asset.asset_id, True)[:2]  # type: ignore[index]
+                    (asset.asset_id,)
                     for asset in self.data.assets
                     if any(self.pinned_policies == asset.policy_id)
                 ]
@@ -498,19 +484,27 @@ class AccountPandasDumper:
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        self._drop_foreign_assets(balance)
+        self._drop_muted_assets(balance)
         if self.args.detail_level == 1:
-            balance.drop(labels=self.OTHER_LABEL, axis=1, level=5, inplace=True)
+            balance.drop(labels=self.OTHER_LABEL, axis=1, level=2, inplace=True)
         balance = (
             balance.T.groupby(
-                level=(0, 1, 2, 4) if not self.args.raw_values else (0, 1, 2, 4, 5)
+                level=(0, 1)
+                if not (self.args.raw_values and self.args.detail_level > 1)
+                else (0, 1, 2)
             )
             .sum(numeric_only=True)
             .T
         )
 
         balance = balance * [
-            np.float_power(10, np.negative(c[2])) for c in balance.columns
+            np.float_power(10, np.negative(self._decimals_for_asset(c[0])))
+            for c in balance.columns
         ]
-        balance.columns = balance.columns.droplevel(2)
+        if not self.args.raw_values:
+            balance.columns = pd.MultiIndex.from_tuples(
+                [(self.asset_names[c[0]], c[1]) for c in balance.columns]
+            )
+            balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+
         return balance
