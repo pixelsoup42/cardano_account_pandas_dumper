@@ -99,21 +99,6 @@ class AccountData:
             name="Transactions", data=result_list, index=[t.hash for t in result_list]
         ).sort_index()
 
-    @classmethod
-    def _fix_api_asset(
-        cls, asset_id: str, asset: blockfrost.utils.Namespace
-    ) -> blockfrost.utils.Namespace:
-        asset.asset_id = asset_id
-        if not hasattr(asset, "metadata") or asset.metadata is None:
-            asset.metadata = blockfrost.utils.Namespace()
-        if not (hasattr(asset.metadata, "name") and asset.metadata.name):
-            asset.raw_name = asset_id.removeprefix(asset.policy_id)
-        else:
-            asset.raw_name = str(bytes(asset.metadata.name, "utf-8").hex())
-        if not hasattr(asset.metadata, "decimals"):
-            asset.metadata.decimals = 0
-        return asset
-
     def _assets_from_transactions(self, api: BlockFrostApi) -> pd.Series:
         all_asset_ids: Set[str] = set()
         for tx_obj in self.transactions:  # pylint: disable=not-an-iterable
@@ -122,29 +107,15 @@ class AccountData:
                     [a.unit for i in tx_obj.utxos.inputs for a in i.amount]
                     + [a.unit for i in tx_obj.utxos.outputs for a in i.amount]
                 )
-        lovelace_asset_obj = blockfrost.utils.Namespace()
-        lovelace_asset_obj.metadata = blockfrost.utils.Namespace()
-        lovelace_asset_obj.metadata.name = "ADA"
-        lovelace_asset_obj.metadata.decimals = self.LOVELACE_DECIMALS
-        lovelace_asset_obj.policy_id = ""
-        lovelace_asset_obj.asset_name = "ADA"
         asset_list = [
-            self._fix_api_asset(
-                asset,
-                api.asset(asset)
-                if asset != self.LOVELACE_ASSET
-                else lovelace_asset_obj,
-            )
+            (asset, api.asset(asset))
             for asset in all_asset_ids
+            if asset != self.LOVELACE_ASSET
         ]
         return pd.Series(
-            data=asset_list,
-            index=pd.MultiIndex.from_tuples(
-                [
-                    (asset.asset_id, asset.policy_id, asset.raw_name)
-                    for asset in asset_list
-                ]
-            ),
+            name="Assets",
+            data=[a[1] for a in asset_list],
+            index=[a[0] for a in asset_list],
         ).sort_index()
 
     @staticmethod
@@ -187,18 +158,17 @@ class AccountData:
             if a_r.epoch < self.end_epoch
         ]
 
-        pool_result_list = {
+        pool_dict = {
             pool: api.pool_metadata(pool)
             for pool in frozenset([r.pool_id for r in reward_list])
         }
         reward_result_list = [
-            self._reward_transaction(api=api, reward=a_r, pools=pool_result_list)
+            self._reward_transaction(api=api, reward=a_r, pools=pool_dict)
             for a_r in reward_list
         ]
         return pd.Series(
             name="Rewards",
             data=reward_result_list,
-            index=[t.hash for t in reward_result_list],
         ).sort_index()
 
 
@@ -211,32 +181,37 @@ class AccountPandasDumper:
 
     def __init__(self, data: AccountData, known_dict: Any, args: argparse.Namespace):
         self.data = data
-        self.known_dict = known_dict
         self.args = args
-        self.address_names = (
-            pd.concat(
-                [
-                    pd.Series(
-                        known_dict.get("addresses", {}),
-                    ),
-                    pd.Series({a: " wallet" for a in self.data.own_addresses}),
-                ]
+        self.address_names = pd.Series(
+            (
+                {a: " wallet" for a in self.data.own_addresses}
+                | known_dict.get("addresses", {})
             )
             if not args.raw_values
-            else pd.Series()
+            else {}
         )
-        self.policy_names = (
-            pd.Series(known_dict.get("policies", {}))
-            if not args.raw_values
-            else pd.Series()
+        self.policy_names = pd.Series(
+            known_dict.get("policies", {}) if not args.raw_values else {}
         )
         self.asset_names = pd.Series(
-            {
-                asset.asset_id: self._decode_asset_name(asset.raw_name)
+            (
+                {
+                    asset.asset: self._decode_asset_name(asset)
+                    for asset in self.data.assets
+                }
                 if not args.raw_values
-                else self._truncate(asset.raw_name)
+                else {}
+            )
+            | {self.data.LOVELACE_ASSET: " ADA"}
+        )
+        self.asset_decimals = pd.Series(
+            {
+                asset.asset: np.longlong(asset.metadata.decimals or 0)
+                if hasattr(asset, "metadata") and hasattr(asset.metadata, "decimals")
+                else 0
                 for asset in self.data.assets
             }
+            | {self.data.LOVELACE_ASSET: self.data.LOVELACE_DECIMALS}
         )
         self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
         self.pinned_policies = pd.Series(known_dict.get("pinned_policies", []))
@@ -251,12 +226,18 @@ class AccountPandasDumper:
             else ("..." + value[-self.args.truncate_length :])
         )
 
-    def _decode_asset_name(self, asset_raw_name: str) -> str:
+    def _decode_asset_name(self, asset: blockfrost.utils.Namespace) -> str:
+        if (
+            hasattr(asset, "metadata")
+            and hasattr(asset.metadata, "name")
+            and asset.metadata.name
+        ):
+            return asset.metadata.name
+        asset_hex_name = asset.asset.removeprefix(asset.policy_id)
         try:
-            return bytes.fromhex(asset_raw_name).decode()
+            return bytes.fromhex(asset_hex_name).decode()
         except UnicodeDecodeError:
-            pass
-        return self._truncate(asset_raw_name)
+            return f"{self._format_policy(asset.policy_id)}@{self._truncate(asset_hex_name)}"
 
     @staticmethod
     def _is_hex_number(num: Any) -> bool:
@@ -339,9 +320,6 @@ class AccountPandasDumper:
     def _format_policy(self, policy: str) -> Optional[str]:
         return self.policy_names.get(policy, self._truncate(policy))
 
-    def _decimals_for_asset(self, asset: str) -> np.longlong:
-        return np.longlong(self.data.assets[(asset,)].iloc(0)[0].metadata.decimals or 0)
-
     def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
         # Index: (asset_id, address_name, own)
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
@@ -418,7 +396,7 @@ class AccountPandasDumper:
             # Assets with muted policies
             frozenset(
                 [
-                    asset.asset_id
+                    asset.asset
                     for asset in self.data.assets
                     if any(self.muted_policies == asset.policy_id)
                 ]
@@ -431,7 +409,7 @@ class AccountPandasDumper:
             # Assets with pinned policies
             frozenset(
                 [
-                    asset.asset_id
+                    asset.asset
                     for asset in self.data.assets
                     if any(self.pinned_policies == asset.policy_id)
                 ]
@@ -498,7 +476,7 @@ class AccountPandasDumper:
         )
 
         balance = balance * [
-            np.float_power(10, np.negative(self._decimals_for_asset(c[0])))
+            np.float_power(10, np.negative(self.asset_decimals[c[0]]))
             for c in balance.columns
         ]
         if not self.args.raw_values:
