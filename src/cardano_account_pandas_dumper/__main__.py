@@ -139,7 +139,7 @@ def main():
                 api=api_instance,
                 staking_addresses=staking_addresses_set,
                 to_block=args.to_block,
-                rewards=not args.no_rewards,
+                include_rewards=not args.no_rewards,
             )
         except (ApiError, JSONDecodeError, OSError) as exception:
             parser.exit(
@@ -164,7 +164,11 @@ def main():
     transactions = pd.concat(
         objs=[
             data_from_api.transactions,
-            pd.Series() if args.no_rewards else data_from_api.reward_transactions,
+            pd.Series(
+                []
+                if args.no_rewards
+                else [reporter.reward_transaction(r) for r in data_from_api.rewards]
+            ),
         ],
     ).rename("transactions")
     dataframe = reporter.make_transaction_frame(transactions)

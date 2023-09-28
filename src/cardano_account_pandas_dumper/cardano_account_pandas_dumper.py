@@ -9,10 +9,8 @@ from typing import (
     Dict,
     FrozenSet,
     List,
-    Mapping,
     MutableMapping,
     Optional,
-    Set,
     Tuple,
 )
 import pandas as pd
@@ -32,25 +30,15 @@ class AccountData:
         api: BlockFrostApi,
         staking_addresses: FrozenSet[str],
         to_block: Optional[int],
-        rewards: bool,
+        include_rewards: bool,
     ) -> None:
         self.staking_addresses = staking_addresses
-        if to_block is None:
-            to_block = int(api.block_latest().height - 1)
-        self.to_block = to_block
+        self.to_block = to_block or int(api.block_latest().height - 1)
         block_last = api.block(self.to_block)
         block_after_last = api.block(self.to_block + 1)
         self.end_time = block_after_last.time
         self.end_epoch = block_last.epoch + 1
-        self.own_addresses: FrozenSet[str] = self._own_addresses(api)
-        self.rewards = rewards
-        if self.rewards:
-            self.reward_transactions = self._reward_transactions(api)
-        self.transactions = self._transaction_data(api)
-        self.assets = self._assets_from_transactions(api)
-
-    def _own_addresses(self, api: BlockFrostApi) -> FrozenSet[str]:
-        return frozenset(
+        self.own_addresses = frozenset(
             [
                 a.address
                 for a in itertools.chain(
@@ -61,6 +49,52 @@ class AccountData:
                 )
             ]
         )
+        self.transactions = self._transaction_data(api)
+        self.assets = pd.Series(
+            name="Assets",
+            data={
+                a: api.asset(a)
+                for a in frozenset(
+                    [
+                        a.unit
+                        for tx_obj in self.transactions  # pylint: disable=not-an-iterable
+                        for i in (tx_obj.utxos.inputs + tx_obj.utxos.outputs)
+                        for a in i.amount
+                    ]
+                ).difference([self.LOVELACE_ASSET])
+            },
+        ).sort_index()
+        self.rewards = pd.Series(
+            name="Rewards",
+            data=[
+                (s_a, a_r)
+                for s_a in self.staking_addresses
+                for a_r in api.account_rewards(s_a, gather_pages=True)
+                if a_r.epoch < self.end_epoch
+            ]
+            if include_rewards
+            else [],
+        )
+        self.pools = pd.Series(
+            name="Pools",
+            data={
+                pool: api.pool_metadata(pool)
+                for pool in frozenset([r[1].pool_id for r in self.rewards])
+            }
+            if include_rewards
+            else {},
+        ).sort_index()
+        self.epochs = pd.Series(
+            name="Epochs",
+            data={
+                e: api.epoch(e)
+                for e in frozenset([r[1].epoch for r in self.rewards]).union(
+                    [r[1].epoch + 1 for r in self.rewards]
+                )
+            }
+            if include_rewards
+            else {},
+        ).sort_index()
 
     def _transaction_data(
         self,
@@ -96,79 +130,7 @@ class AccountData:
 
             result_list.append(transaction)
         return pd.Series(
-            name="Transactions", data=result_list, index=[t.hash for t in result_list]
-        ).sort_index()
-
-    def _assets_from_transactions(self, api: BlockFrostApi) -> pd.Series:
-        all_asset_ids: Set[str] = set()
-        for tx_obj in self.transactions:  # pylint: disable=not-an-iterable
-            if hasattr(tx_obj, "utxos"):
-                all_asset_ids.update(
-                    [a.unit for i in tx_obj.utxos.inputs for a in i.amount]
-                    + [a.unit for i in tx_obj.utxos.outputs for a in i.amount]
-                )
-        asset_list = [
-            (asset, api.asset(asset))
-            for asset in all_asset_ids
-            if asset != self.LOVELACE_ASSET
-        ]
-        return pd.Series(
-            name="Assets",
-            data=[a[1] for a in asset_list],
-            index=[a[0] for a in asset_list],
-        ).sort_index()
-
-    @staticmethod
-    def _reward_transaction(
-        api: BlockFrostApi,
-        reward: blockfrost.utils.Namespace,
-        pools: Mapping[str, blockfrost.utils.Namespace],
-    ) -> blockfrost.utils.Namespace:
-        result = blockfrost.utils.Namespace()
-        result.tx_hash = None
-        pool_name = (
-            pools[reward.pool_id].name if reward.pool_id in pools else reward.pool_id
-        )
-        result.metadata = [
-            blockfrost.utils.Namespace(
-                label="674",
-                json_metadata=f"Reward: {reward.type} - {pool_name} - {reward.epoch}",
-            )
-        ]
-        result.reward_amount = reward.amount
-        epoch = api.epoch(reward.epoch + 1)  # Time is right before start of next epoch.
-        result.block_time = epoch.start_time
-        result.index = -1
-        result.fees = "0"
-        result.deposit = "0"
-        result.redeemers = []
-        result.hash = None
-        result.withdrawals = []
-        result.utxos = blockfrost.utils.Namespace()
-        result.utxos.inputs = []
-        result.utxos.outputs = []
-        result.utxos.nonref_inputs = []
-        return result
-
-    def _reward_transactions(self, api: BlockFrostApi) -> pd.Series:
-        reward_list = [
-            a_r
-            for s_a in self.staking_addresses
-            for a_r in api.account_rewards(s_a, gather_pages=True)
-            if a_r.epoch < self.end_epoch
-        ]
-
-        pool_dict = {
-            pool: api.pool_metadata(pool)
-            for pool in frozenset([r.pool_id for r in reward_list])
-        }
-        reward_result_list = [
-            self._reward_transaction(api=api, reward=a_r, pools=pool_dict)
-            for a_r in reward_list
-        ]
-        return pd.Series(
-            name="Rewards",
-            data=reward_result_list,
+            name="Transactions", data={t.hash: t for t in result_list}
         ).sort_index()
 
 
@@ -416,6 +378,36 @@ class AccountPandasDumper:
             )
         )
         balance.drop(assets_to_drop, axis=1, inplace=True)
+
+    def reward_transaction(
+        self, reward: Tuple[str, blockfrost.utils.Namespace]
+    ) -> blockfrost.utils.Namespace:
+        """Build reward pseudo-transaction for tuple (staking_addr, reward)."""
+        result = blockfrost.utils.Namespace()
+        result.tx_hash = None
+        result.metadata = [
+            blockfrost.utils.Namespace(
+                label="674",
+                json_metadata=f"Reward: {reward[1].type} - {self.data.pools[reward[1].pool_id].name}"
+                + f" -  {reward[0]} - {reward[1].epoch}",
+            )
+        ]
+        result.reward_amount = reward[1].amount
+        epoch = self.data.epochs[
+            reward[1].epoch + 1
+        ]  # Time is right before start of next epoch.
+        result.block_time = epoch.start_time
+        result.index = -1
+        result.fees = "0"
+        result.deposit = "0"
+        result.redeemers = []
+        result.hash = None
+        result.withdrawals = []
+        result.utxos = blockfrost.utils.Namespace()
+        result.utxos.inputs = []
+        result.utxos.outputs = []
+        result.utxos.nonref_inputs = []
+        return result
 
     def make_transaction_frame(
         self,
