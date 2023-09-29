@@ -12,6 +12,8 @@ from blockfrost import ApiError, BlockFrostApi
 
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
 
+PROJECT_KEY_ERROR_CODES = frozenset([402, 403, 418, 429])
+
 
 def _create_arg_parser():
     result = argparse.ArgumentParser(prog="cardano_account_pandas_dumper")
@@ -136,14 +138,23 @@ def main():
                 to_block=args.to_block,
                 include_rewards=not args.no_rewards,
             )
-        except (ApiError, JSONDecodeError, OSError) as exception:
+        except ApiError as api_exception:
             parser.exit(
                 status=2,
                 message=(
-                    f"Failed to read data from blockfrost.io: {exception},"
-                    + " maybe create your own API key at https://blockfrost.io/dashboard and "
-                    + "specify it with the --blockfrost_project_id flag."
+                    f"Failed to read data from blockfrost.io: {api_exception}."
+                    + (
+                        "\nMaybe create your own API key at https://blockfrost.io/dashboard and "
+                        + "specify it with the --blockfrost_project_id flag."
+                    )
+                    if api_exception.status_code in PROJECT_KEY_ERROR_CODES
+                    else ""
                 ),
+            )
+        except (JSONDecodeError, OSError) as exception:
+            parser.exit(
+                status=2,
+                message=(f"Failed to read data from blockfrost.io: {exception},"),
             )
         if args.checkpoint_output:
             try:
