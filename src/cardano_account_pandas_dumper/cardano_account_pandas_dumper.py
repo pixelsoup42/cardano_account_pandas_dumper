@@ -1,29 +1,20 @@
 """ Cardano Account To Pandas Dumper."""
-import argparse
 import datetime
 import functools
 import itertools
 from collections import defaultdict
-from typing import (
-    Any,
-    Dict,
-    FrozenSet,
-    List,
-    MutableMapping,
-    Optional,
-    Tuple,
-)
-import pandas as pd
-import numpy as np
-from blockfrost import BlockFrostApi
+from typing import Any, Dict, FrozenSet, List, MutableMapping, Optional, Tuple
+
 import blockfrost.utils
+import numpy as np
+import pandas as pd
+from blockfrost import BlockFrostApi
 
 
 class AccountData:
     """Hold data retrieved from the API to allow checkpointing it."""
 
     LOVELACE_ASSET = "lovelace"
-    LOVELACE_DECIMALS = 6
 
     def __init__(
         self,
@@ -142,31 +133,29 @@ class AccountPandasDumper:
     TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
     OWN_LABEL = "own"
     OTHER_LABEL = "other"
+    ADA_ASSET = " ADA"
+    ADA_DECIMALS = 6
 
-    def __init__(self, data: AccountData, known_dict: Any, args: argparse.Namespace):
+    def __init__(
+        self,
+        data: AccountData,
+        known_dict: Any,
+        truncate_length: int,
+        raw_values: bool,
+        unmute: bool,
+    ):
         self.data = data
-        self.args = args
+        self.truncate_length = truncate_length
+        self.raw_values = raw_values
+        self.unmute = unmute
         self.address_names = pd.Series(
-            (
-                {a: " wallet" for a in self.data.own_addresses}
-                | known_dict.get("addresses", {})
-            )
-            if not args.raw_values
-            else {}
+            {a: " wallet" for a in self.data.own_addresses}
+            | known_dict.get("addresses", {})
         )
-        self.policy_names = pd.Series(
-            known_dict.get("policies", {}) if not args.raw_values else {}
-        )
+        self.policy_names = pd.Series(known_dict.get("policies", {}))
         self.asset_names = pd.Series(
-            (
-                {
-                    asset.asset: self._decode_asset_name(asset)
-                    for asset in self.data.assets
-                }
-                if not args.raw_values
-                else {}
-            )
-            | {self.data.LOVELACE_ASSET: " ADA"}
+            {asset.asset: self._decode_asset_name(asset) for asset in self.data.assets}
+            | {self.ADA_ASSET: self.ADA_ASSET}
         )
         self.asset_decimals = pd.Series(
             {
@@ -175,7 +164,7 @@ class AccountPandasDumper:
                 else 0
                 for asset in self.data.assets
             }
-            | {self.data.LOVELACE_ASSET: self.data.LOVELACE_DECIMALS}
+            | {self.ADA_ASSET: self.ADA_DECIMALS}
         )
         self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
         self.pinned_policies = pd.Series(known_dict.get("pinned_policies", []))
@@ -186,8 +175,8 @@ class AccountPandasDumper:
     def _truncate(self, value: str) -> str:
         return (
             value
-            if self.args.no_truncate or len(value) <= self.args.truncate_length
-            else ("..." + value[-self.args.truncate_length :])
+            if not self.truncate_length or len(value) <= self.truncate_length
+            else ("..." + value[-self.truncate_length :])
         )
 
     def _decode_asset_name(self, asset: blockfrost.utils.Namespace) -> str:
@@ -223,14 +212,14 @@ class AccountPandasDumper:
                 hex_name = self._is_hex_number(att)
                 value = getattr(obj, att)
                 hex_value = isinstance(value, str) and self._is_hex_number(value)
-                if (hex_name and hex_value) and not self.args.unmute:
+                if (hex_name and hex_value) and not self.unmute:
                     continue
                 out_att = self._truncate(att) if hex_name else att
                 value = self._munge_metadata(value)
                 if value:
                     result[out_att] = value
             return result
-        elif isinstance(obj, str) and self._is_hex_number(obj) and not self.args.unmute:
+        elif isinstance(obj, str) and self._is_hex_number(obj) and not self.unmute:
             return {}
         else:
             return obj
@@ -245,7 +234,7 @@ class AccountPandasDumper:
             if (
                 self._is_hex_number(label)
                 and (not val or self._is_hex_number(val))
-                and not self.args.unmute
+                and not self.unmute
             ):
                 continue
             result.append(label)
@@ -283,66 +272,6 @@ class AccountPandasDumper:
 
     def _format_policy(self, policy: str) -> Optional[str]:
         return self.policy_names.get(policy, self._truncate(policy))
-
-    def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
-        # Index: (asset_id, address_name, own)
-        result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        result[(self.data.LOVELACE_ASSET, " fees", self.OWN_LABEL)] = np.longlong(
-            transaction.fees
-        )
-        result[(self.data.LOVELACE_ASSET, " deposit", self.OWN_LABEL)] = np.longlong(
-            transaction.deposit
-        )
-        if transaction.reward_amount:
-            result[
-                (self.data.LOVELACE_ASSET, " rewards", self.OWN_LABEL)
-            ] = np.longlong(transaction.reward_amount)
-        if transaction.withdrawals:
-            result[
-                (self.data.LOVELACE_ASSET, " rewards withdrawal", self.OWN_LABEL)
-            ] = np.negative(
-                functools.reduce(
-                    np.add,
-                    [np.longlong(w.amount) for w in transaction.withdrawals],
-                    np.longlong(0),
-                )
-            )
-        for utxo in transaction.utxos.nonref_inputs:
-            if not utxo.collateral or not transaction.valid_contract:
-                for amount in utxo.amount:
-                    result[
-                        (
-                            amount.unit,
-                            self.address_names.get(
-                                utxo.address,
-                                self._truncate(utxo.address)
-                                if self.args.raw_values
-                                else self.OTHER_LABEL,
-                            ),
-                            self.OWN_LABEL
-                            if utxo.address in self.data.own_addresses
-                            else self.OTHER_LABEL,
-                        )
-                    ] -= np.longlong(amount.quantity)
-
-        for utxo in transaction.utxos.outputs:
-            for amount in utxo.amount:
-                result[
-                    (
-                        amount.unit,
-                        self.address_names.get(
-                            utxo.address,
-                            self._truncate(utxo.address)
-                            if self.args.raw_values
-                            else self.OTHER_LABEL,
-                        ),
-                        self.OWN_LABEL
-                        if utxo.address in self.data.own_addresses
-                        else self.OTHER_LABEL,
-                    )
-                ] += np.longlong(amount.quantity)
-
-        return result
 
     @classmethod
     def _extract_timestamp(cls, transaction: blockfrost.utils.Namespace) -> Any:
@@ -412,9 +341,94 @@ class AccountPandasDumper:
         result.utxos.nonref_inputs = []
         return result
 
+    def _column_key(self, utxo, amount):
+        return (
+            amount.unit if amount.unit != self.data.LOVELACE_ASSET else self.ADA_ASSET,
+            self._truncate(utxo.address)
+            if self.raw_values
+            else self.address_names.get(
+                utxo.address,
+                self.OTHER_LABEL,
+            ),
+            self.OWN_LABEL
+            if utxo.address in self.data.own_addresses
+            else self.OTHER_LABEL,
+        )
+
+    def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
+        # Index: (asset_id, address_name, own)
+        result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
+        result[(self.ADA_ASSET, " fees", self.OWN_LABEL)] = np.longlong(
+            transaction.fees
+        )
+        result[(self.ADA_ASSET, " deposit", self.OWN_LABEL)] = np.longlong(
+            transaction.deposit
+        )
+        if transaction.reward_amount:
+            result[(self.ADA_ASSET, " rewards", self.OWN_LABEL)] = np.longlong(
+                transaction.reward_amount
+            )
+        if transaction.withdrawals:
+            result[
+                (self.ADA_ASSET, " rewards withdrawal", self.OWN_LABEL)
+            ] = np.negative(
+                functools.reduce(
+                    np.add,
+                    [np.longlong(w.amount) for w in transaction.withdrawals],
+                    np.longlong(0),
+                )
+            )
+        for utxo in transaction.utxos.nonref_inputs:
+            if not utxo.collateral or not transaction.valid_contract:
+                for amount in utxo.amount:
+                    result[self._column_key(utxo, amount)] -= np.longlong(
+                        amount.quantity
+                    )
+
+        for utxo in transaction.utxos.outputs:
+            for amount in utxo.amount:
+                result[self._column_key(utxo, amount)] += np.longlong(amount.quantity)
+
+        return result
+
+    def make_balance_frame(self, transactions: pd.Series, detail_level: int):
+        """Make DataFrame with transaction balances."""
+        balance = pd.DataFrame(
+            data=[self._transaction_balance(x) for x in transactions],
+            dtype="Int64",
+        )
+        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+        if not self.unmute:
+            self._drop_muted_assets(balance)
+        if detail_level == 1:
+            balance.drop(labels=self.OTHER_LABEL, axis=1, level=2, inplace=True)
+        balance = (
+            balance.T.groupby(
+                level=(0, 1)
+                if not (self.raw_values and detail_level > 1)
+                else (0, 1, 2)
+            )
+            .sum(numeric_only=True)
+            .T
+        )
+
+        balance = balance * [
+            np.float_power(10, np.negative(self.asset_decimals[c[0]]))
+            for c in balance.columns
+        ]
+        if not self.raw_values:
+            balance.columns = pd.MultiIndex.from_tuples(
+                [(self.asset_names[c[0]], c[1]) for c in balance.columns]
+            )
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+
+        return balance
+
     def make_transaction_frame(
         self,
         transactions: pd.Series,
+        detail_level: int,
         with_tx_hash: bool = True,
         with_tx_message: bool = True,
         with_total: bool = True,
@@ -429,7 +443,7 @@ class AccountPandasDumper:
         if with_tx_message:
             columns.append(transactions.rename("message").map(self._format_message))
             total.append("Total")
-        balance = self.make_balance_frame(transactions)
+        balance = self.make_balance_frame(transactions, detail_level)
         frame = pd.concat(columns, axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
@@ -448,36 +462,3 @@ class AccountPandasDumper:
                 [frame, pd.DataFrame(data=[total], columns=frame.columns)]
             )
         return frame
-
-    def make_balance_frame(self, transactions):
-        """Make DataFrame with transaction balances."""
-        balance = pd.DataFrame(
-            data=[self._transaction_balance(x) for x in transactions],
-            dtype="Int64",
-        )
-        balance.columns = pd.MultiIndex.from_tuples(balance.columns)
-        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        self._drop_muted_assets(balance)
-        if self.args.detail_level == 1:
-            balance.drop(labels=self.OTHER_LABEL, axis=1, level=2, inplace=True)
-        balance = (
-            balance.T.groupby(
-                level=(0, 1)
-                if not (self.args.raw_values and self.args.detail_level > 1)
-                else (0, 1, 2)
-            )
-            .sum(numeric_only=True)
-            .T
-        )
-
-        balance = balance * [
-            np.float_power(10, np.negative(self.asset_decimals[c[0]]))
-            for c in balance.columns
-        ]
-        if not self.args.raw_values:
-            balance.columns = pd.MultiIndex.from_tuples(
-                [(self.asset_names[c[0]], c[1]) for c in balance.columns]
-            )
-            balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-
-        return balance

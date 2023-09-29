@@ -74,14 +74,9 @@ def _create_arg_parser():
     )
     result.add_argument(
         "--truncate_length",
-        help="Length to truncate numerical identifiers to.",
+        help="Length to truncate numerical identifiers to, 0= do not truncate.",
         type=int,
         default=6,
-    )
-    result.add_argument(
-        "--no_truncate",
-        help="Do not truncate numerical identifiers.",
-        action="store_true",
     )
     result.add_argument(
         "--raw_values",
@@ -159,7 +154,11 @@ def main():
     else:
         parser.exit(status=1, message="Staking address(es) required.")
     reporter = AccountPandasDumper(
-        data=data_from_api, known_dict=known_dict_from_file, args=args
+        data=data_from_api,
+        known_dict=known_dict_from_file,
+        truncate_length=args.truncate_length,
+        raw_values=args.raw_values,
+        unmute=args.unmute,
     )
     transactions = pd.concat(
         objs=[
@@ -171,7 +170,10 @@ def main():
             ),
         ],
     ).rename("transactions")
-    dataframe = reporter.make_transaction_frame(transactions)
+    dataframe = reporter.make_transaction_frame(
+        transactions,
+        detail_level=args.detail_level,
+    )
     if args.csv_output:
         try:
             dataframe.replace(np.float64(0), pd.NA).to_csv(args.csv_output, index=False)
@@ -182,7 +184,7 @@ def main():
             dataframe.replace(np.float64(0), pd.NA).to_excel(
                 args.xlsx_output,
                 index=True,
-                sheet_name=f"Transactions until block {args.to_block}",
+                sheet_name=f"Transactions to block {args.to_block}",
                 merge_cells=True,
                 freeze_panes=(3 if args.raw_values else 2, 3),
             )
