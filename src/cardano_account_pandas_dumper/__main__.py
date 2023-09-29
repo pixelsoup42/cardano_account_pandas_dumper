@@ -12,6 +12,7 @@ from blockfrost import ApiError, BlockFrostApi
 
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
 
+# Error codes due to project key rate limiting or capping
 PROJECT_KEY_ERROR_CODES = frozenset([402, 403, 418, 429])
 
 
@@ -106,7 +107,7 @@ def main():
     if invalid_staking_addresses:
         parser.exit(
             status=1,
-            message=f"Following addresses do not look like valid staking addresses: {' '.join(invalid_staking_addresses)}",
+            message=f"Following addresses do not look like valid staking addresses: {' '.join(invalid_staking_addresses)}.",
         )
     if not any([args.checkpoint_output, args.csv_output, args.xlsx_output]):
         parser.exit(
@@ -140,7 +141,7 @@ def main():
                 ),
                 status=1,
             )
-    elif staking_addresses_set:
+    else:
         try:
             api_instance = BlockFrostApi(project_id=args.blockfrost_project_id)
             data_from_api = AccountData(
@@ -173,8 +174,6 @@ def main():
                 args.checkpoint_output.flush()
             except (pickle.PicklingError, OSError) as exception:
                 warnings.warn(f"Failed to write checkpoint: {exception}")
-    else:
-        parser.exit(status=1, message="Staking address(es) required.")
     reporter = AccountPandasDumper(
         data=data_from_api,
         known_dict=known_dict_from_file,
