@@ -69,16 +69,13 @@ For instance, block 8211670 matches EOY 2022 pretty closely.
 : Path to checkpoint file to read, if any.
 The checkpoint must have been created with the `--checkpoint_output` flag.
 
-`--pandas_output PANDAS_OUTPUT`
-: Path to pickled Pandas dataframe output file.
+`--xlsx_output XLSX_OUTPUT`
+: Path to Excel spreadsheet output file.
 If you want to further process the data with [Pandas](https://pandas.pydata.org/), you can serialize the generated `DataFrame` into a file.
 
 `--csv_output CSV_OUTPUT`
 : Path to CSV output file.
-This the flag most people will need, it specifies the CSV file to write the output to.
-Each row is a transaction, each column is a combination of asset + address.
-Addresses belonging to one of the specified staking addresses are labeled as `own`.
-With `--detail_level=2`, known addresses are listed with their name, other addresses are labeled as `other`.
+Specifies the CSV file to write the output to.
 
 `--detail_level DETAIL_LEVEL`
 : Level of detail of report (1=only own addresses, 2=other addresses as well).
@@ -108,7 +105,7 @@ If you need numerical hex values to not be truncated at all (see `--truncate_len
 
 ## Output format
 
-### CSV
+### CSV and XLSX
 
 column 0:
 transaction timestamp
@@ -128,6 +125,8 @@ row 2: address
 
 If the `--raw_values` flag is passed, row 3 is inserted, with a value of `own`for own addresses (belonging to the specified staking addresses)
 and `other` for other addresses (if `--raw_values`is not passed, this information is on row 2).
+Addresses belonging to one of the specified staking addresses are labeled as `own`.
+With `--detail_level=2`, known addresses are listed with their name, other addresses are labeled as `other`.
 
 ## Possible improvements
 
@@ -170,8 +169,7 @@ Here is a comparison table for both projects (please submit corrections if you t
 | Knows about assets other than ADA |✔️|❌|
 | Knows about DeFI contract addresses |✔️[^2]|❌|
 | Extracts useful information from tx metadata |✔️|❌|
-| .xlsx output |❌[^3]|✔️|
-| [Pandas](https://pandas.pydata.org/) compatible |✔️|❌|
+| .xlsx output |✔️|✔️|
 | Ready to use after one-liner install command |✔️|❌|
 | Code is [Mypy](https://mypy-lang.org/) clean |✔️|❌|
 | Lines of Python code in repo (2023-09-01)| 529 | 1011|
@@ -182,5 +180,3 @@ Here is a comparison table for both projects (please submit corrections if you t
 [^1]: Could not get this to work
 
 [^2]: With `--detail_level=2`
-
-[^3]: Deliberate, since this format is lossy
