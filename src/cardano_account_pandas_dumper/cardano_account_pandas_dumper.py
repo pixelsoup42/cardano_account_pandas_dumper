@@ -436,7 +436,7 @@ class AccountPandasDumper:
         ]
         if not self.raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
-                [(self.asset_names[c[0]], c[2]) for c in balance.columns]
+                [(self.asset_names[c[0]], c[1]) for c in balance.columns]
             )
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
 
