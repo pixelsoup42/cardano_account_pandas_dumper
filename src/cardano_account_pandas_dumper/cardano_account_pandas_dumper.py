@@ -456,7 +456,7 @@ class AccountPandasDumper:
         total: List[Any] = [columns[0].max() + self.TRANSACTION_OFFSET]
         if with_tx_hash:
             columns.append(transactions.rename("hash").map(lambda x: x.hash))
-            total.append("")
+            total.append("" if with_tx_message else "Total")
         if with_tx_message:
             columns.append(transactions.rename("message").map(self._format_message))
             total.append("Total")
