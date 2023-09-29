@@ -52,8 +52,8 @@ def _create_arg_parser():
         type=argparse.FileType("rb"),
     )
     result.add_argument(
-        "--pandas_output",
-        help="Path to pickled Pandas dataframe output file.",
+        "--xlsx_output",
+        help="Path to .xlsx output file.",
         type=argparse.FileType("wb"),
     )
     result.add_argument(
@@ -100,11 +100,11 @@ def main():
     """Main function."""
     parser = _create_arg_parser()
     args = parser.parse_args()
-    if not any([args.checkpoint_output, args.csv_output, args.pandas_output]):
+    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output]):
         parser.exit(
             status=1,
             message="No output specified, neeed at least one of --checkpoint_output,"
-            + " --csv_output, --pandas_output.\n",
+            + " --csv_output, --xlsx_output.\n",
         )
     known_dict_from_file = jstyleson.load(args.known_file) if args.known_file else {}
     staking_addresses_set = frozenset(args.staking_address)
@@ -172,16 +172,22 @@ def main():
         ],
     ).rename("transactions")
     dataframe = reporter.make_transaction_frame(transactions)
-    if args.pandas_output:
-        try:
-            dataframe.to_pickle(args.pandas_output)
-        except (pickle.PicklingError, OSError) as exception:
-            warnings.warn(f"Failed to write pandas file: {exception}")
     if args.csv_output:
         try:
             dataframe.replace(np.float64(0), pd.NA).to_csv(args.csv_output, index=False)
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
+    if args.xlsx_output:
+        try:
+            dataframe.replace(np.float64(0), pd.NA).to_excel(
+                args.xlsx_output,
+                index=True,
+                sheet_name=f"Transactions until block {args.to_block}",
+                merge_cells=True,
+                freeze_panes=(3 if args.raw_values else 2, 3),
+            )
+        except OSError as exception:
+            warnings.warn(f"Failed to write .xlsx file: {exception}")
     print("Done.")
 
 

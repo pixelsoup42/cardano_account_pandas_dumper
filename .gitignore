@@ -4,6 +4,7 @@
 .~*
 *.pickle
 *.csv
+*.xlsx
 *.bak
 build
 *.egg-info
