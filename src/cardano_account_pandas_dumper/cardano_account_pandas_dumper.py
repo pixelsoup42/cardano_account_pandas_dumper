@@ -231,10 +231,10 @@ class AccountPandasDumper:
     def _parse_nft_mint(self, meta: blockfrost.utils.Namespace) -> str:
         meta_dict = meta.to_dict()
         result = "NFT Mint:"
-        for policy, v in meta_dict.items():
+        for policy, _v in meta_dict.items():
             if policy == "version":
                 continue
-            for asset_name in v.to_dict().keys():
+            for asset_name in _v.to_dict().keys():
                 result += f"{self._format_policy(policy)}@{asset_name} "
         return result
 
