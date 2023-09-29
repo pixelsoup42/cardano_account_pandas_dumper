@@ -16,7 +16,10 @@ PROJECT_KEY_ERROR_CODES = frozenset([402, 403, 418, 429])
 
 
 def _create_arg_parser():
-    result = argparse.ArgumentParser(prog="cardano_account_pandas_dumper")
+    result = argparse.ArgumentParser(
+        prog="cardano_account_pandas_dumper",
+        description="Retrieve transaction history for Cardano staking addresses.",
+    )
     exclusive_group = result.add_mutually_exclusive_group()
     result.add_argument(
         "--blockfrost_project_id",
@@ -97,6 +100,14 @@ def main():
     """Main function."""
     parser = _create_arg_parser()
     args = parser.parse_args()
+    invalid_staking_addresses = frozenset(
+        [a for a in args.staking_address if not a.startswith("stake")]
+    )
+    if invalid_staking_addresses:
+        parser.exit(
+            status=1,
+            message=f"Following addresses do not look like valid staking addresses: {' '.join(invalid_staking_addresses)}",
+        )
     if not any([args.checkpoint_output, args.csv_output, args.xlsx_output]):
         parser.exit(
             status=1,
