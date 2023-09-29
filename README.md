@@ -165,11 +165,11 @@ Here is a comparison table for both projects (please submit corrections if you t
 | Feature | [cardano_account_pandas_dumper](https://github.com/pixelsoup42/cardano_account_pandas_dumper) | [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter) |
 | ------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------|
 | CSV output |✔️|✔️|
+| .xlsx output |✔️|✔️|
 | coingecko integration for fiat price |❌|✔️[^1]|
 | Knows about assets other than ADA |✔️|❌|
 | Knows about DeFI contract addresses |✔️[^2]|❌|
 | Extracts useful information from tx metadata |✔️|❌|
-| .xlsx output |✔️|✔️|
 | Ready to use after one-liner install command |✔️|❌|
 | Code is [Mypy](https://mypy-lang.org/) clean |✔️|❌|
 | Lines of Python code in repo (2023-09-01)| 529 | 1011|
