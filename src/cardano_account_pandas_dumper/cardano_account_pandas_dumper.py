@@ -38,6 +38,39 @@ class AccountData:
         block_after_last = api.block(self.to_block + 1)
         self.end_time = block_after_last.time
         self.end_epoch = block_last.epoch + 1
+        self.rewards = pd.Series(
+            name="Rewards",
+            data=[
+                (s_a, a_r)
+                for s_a in self.staking_addresses
+                for a_r in api.account_rewards(s_a, gather_pages=True)
+                if a_r.epoch < self.end_epoch
+            ]
+            if include_rewards
+            else [],
+        )
+        self.epochs = pd.Series(
+            name="Epochs",
+            data={
+                e: api.epoch(e)
+                for e in frozenset(
+                    itertools.chain(
+                        *[[r[1].epoch, r[1].epoch + 1] for r in self.rewards]
+                    )
+                )
+            }
+            if include_rewards
+            else {},
+        ).sort_index()
+        self.pools = pd.Series(
+            name="Pools",
+            data={
+                pool: api.pool_metadata(pool)
+                for pool in frozenset([r[1].pool_id for r in self.rewards])
+            }
+            if include_rewards
+            else {},
+        ).sort_index()
         self.own_addresses = frozenset(
             [
                 a.address
@@ -63,37 +96,6 @@ class AccountData:
                     ]
                 ).difference([self.LOVELACE_ASSET])
             },
-        ).sort_index()
-        self.rewards = pd.Series(
-            name="Rewards",
-            data=[
-                (s_a, a_r)
-                for s_a in self.staking_addresses
-                for a_r in api.account_rewards(s_a, gather_pages=True)
-                if a_r.epoch < self.end_epoch
-            ]
-            if include_rewards
-            else [],
-        )
-        self.pools = pd.Series(
-            name="Pools",
-            data={
-                pool: api.pool_metadata(pool)
-                for pool in frozenset([r[1].pool_id for r in self.rewards])
-            }
-            if include_rewards
-            else {},
-        ).sort_index()
-        self.epochs = pd.Series(
-            name="Epochs",
-            data={
-                e: api.epoch(e)
-                for e in frozenset([r[1].epoch for r in self.rewards]).union(
-                    [r[1].epoch + 1 for r in self.rewards]
-                )
-            }
-            if include_rewards
-            else {},
         ).sort_index()
 
     def _transaction_data(
@@ -388,7 +390,8 @@ class AccountPandasDumper:
         result.metadata = [
             blockfrost.utils.Namespace(
                 label="674",
-                json_metadata=f"Reward: {reward[1].type} - {self.data.pools[reward[1].pool_id].name}"
+                json_metadata="Reward: "
+                + f"{reward[1].type} - {self.data.pools[reward[1].pool_id].name}"
                 + f" -  {reward[0]} - {reward[1].epoch}",
             )
         ]
