@@ -3,7 +3,7 @@ import datetime
 import functools
 import itertools
 from collections import defaultdict
-from typing import Any, Dict, FrozenSet, List, MutableMapping, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, MutableMapping, Optional, Set, Tuple
 
 import blockfrost.utils
 import numpy as np
@@ -135,6 +135,8 @@ class AccountPandasDumper:
     OTHER_LABEL = "other"
     ADA_ASSET = " ADA"
     ADA_DECIMALS = 6
+    METADATA_MESSAGE_LABEL = "674"
+    METADATA_NFT_MINT_LABEL = "721"
 
     def __init__(
         self,
@@ -168,7 +170,6 @@ class AccountPandasDumper:
         )
         self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
         self.pinned_policies = pd.Series(known_dict.get("pinned_policies", []))
-
         self.scripts = pd.Series(known_dict.get("scripts", {}))
         self.labels = pd.Series(known_dict.get("labels", {}))
 
@@ -211,48 +212,65 @@ class AccountPandasDumper:
                     continue
                 hex_name = self._is_hex_number(att)
                 value = getattr(obj, att)
-                hex_value = isinstance(value, str) and self._is_hex_number(value)
-                if (hex_name and hex_value) and not self.unmute:
+                if (hex_name and self._is_hex_number(value)) and not self.unmute:
                     continue
-                out_att = self._truncate(att) if hex_name else att
                 value = self._munge_metadata(value)
                 if value:
+                    out_att = self._truncate(att) if hex_name else att
+                    if out_att == "msg":
+                        return (
+                            " ".join(value) if isinstance(value, list) else str(value)
+                        )
                     result[out_att] = value
             return result
-        elif isinstance(obj, str) and self._is_hex_number(obj) and not self.unmute:
+        elif self._is_hex_number(obj) and not self.unmute:
             return {}
         else:
             return obj
 
+    def _parse_nft_mint(self, meta: blockfrost.utils.Namespace) -> str:
+        meta_dict = meta.to_dict()
+        result = "NFT Mint:"
+        for policy, v in meta_dict.items():
+            if policy == "version":
+                continue
+            for asset_name in v.to_dict().keys():
+                result += f"{self._format_policy(policy)}@{asset_name} "
+        return result
+
     def _format_message(self, tx_obj: blockfrost.utils.Namespace) -> str:
         result: List[str] = []
         for metadata_key in tx_obj.metadata:
-            label = self.labels.get(
-                metadata_key.label, self._truncate(metadata_key.label)
-            )
-            val = self._munge_metadata(metadata_key.json_metadata)
+            if metadata_key.label == self.METADATA_NFT_MINT_LABEL:
+                label = None
+                val = self._parse_nft_mint(metadata_key.json_metadata)
+            else:
+                if metadata_key.label == self.METADATA_MESSAGE_LABEL:
+                    label = None
+                else:
+                    label = self.labels.get(
+                        metadata_key.label, self._truncate(metadata_key.label)
+                    )
+                val = self._munge_metadata(metadata_key.json_metadata)
             if (
                 self._is_hex_number(label)
                 and (not val or self._is_hex_number(val))
                 and not self.unmute
             ):
                 continue
-            result.append(label)
-            result.append(":")
+            if label:
+                result.extend([label, ":"])
             result.append(str(val))
-        redeemer_scripts: Dict[str, List] = defaultdict(list)
+        redeemer_scripts: Dict[str, Set] = defaultdict(set)
         for redeemer in tx_obj.redeemers:
             if redeemer.purpose == "spend":
-                redeemer_scripts["Spend:"].append(
+                redeemer_scripts["Spend:"].add(
                     self._format_script(redeemer.script_hash)
                 )
             elif redeemer.purpose == "mint":
-                redeemer_scripts["Mint:"].append(
-                    self._format_policy(redeemer.script_hash)
-                )
+                redeemer_scripts["Mint:"].add(self._format_policy(redeemer.script_hash))
         for k, redeemer_script in redeemer_scripts.items():
-            result.append(k)
-            result.append(str(redeemer_script))
+            result.extend([k, str(redeemer_script)])
         if not result and all(
             [
                 utxo.address in self.data.own_addresses
@@ -260,18 +278,17 @@ class AccountPandasDumper:
             ]
         ):
             result = ["(internal)"]
-        return (
-            " ".join(result)
-            .removeprefix("Message : ")
-            .removeprefix("{'msg': ['")
-            .removesuffix("']}")
-        )
+        return " ".join(result)
 
     def _format_script(self, script: str) -> str:
-        return self.scripts.get(script, self._truncate(script))
+        return ({} if self.raw_values else self.scripts).get(
+            script, self._truncate(script)
+        )
 
     def _format_policy(self, policy: str) -> Optional[str]:
-        return self.policy_names.get(policy, self._truncate(policy))
+        return ({} if self.raw_values else self.policy_names).get(
+            policy, self._truncate(policy)
+        )
 
     @classmethod
     def _extract_timestamp(cls, transaction: blockfrost.utils.Namespace) -> Any:
@@ -318,7 +335,7 @@ class AccountPandasDumper:
         result.tx_hash = None
         result.metadata = [
             blockfrost.utils.Namespace(
-                label="674",
+                label=self.METADATA_MESSAGE_LABEL,
                 json_metadata="Reward: "
                 + f"{reward[1].type} - {self.data.pools[reward[1].pool_id].name}"
                 + f" -  {reward[0]} - {reward[1].epoch}",
