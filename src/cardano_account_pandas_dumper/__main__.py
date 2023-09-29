@@ -147,7 +147,7 @@ def main():
                         "\nMaybe create your own API key at https://blockfrost.io/dashboard and "
                         + "specify it with the --blockfrost_project_id flag."
                     )
-                    if api_exception.status_code in PROJECT_KEY_ERROR_CODES
+                    if int(api_exception.status_code) in PROJECT_KEY_ERROR_CODES
                     else ""
                 ),
             )
