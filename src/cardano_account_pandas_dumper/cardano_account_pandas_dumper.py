@@ -131,7 +131,7 @@ class AccountPandasDumper:
     """Hold logic to convert an instance of AccountData to a Pandas dataframe."""
 
     TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
-    OWN_LABEL = "own"
+    OWN_LABEL = " own"
     OTHER_LABEL = "other"
     ADA_ASSET = " ADA"
     ADA_DECIMALS = 6
@@ -301,7 +301,7 @@ class AccountPandasDumper:
         assets_to_drop = frozenset(
             # Assets that touch other addresses
             x[:1]
-            for x in balance.xs(self.OTHER_LABEL, level=-1, axis=1).columns
+            for x in balance.xs(self.OTHER_LABEL, level=1, axis=1).columns
         ).union(
             # Assets with muted policies
             frozenset(
@@ -314,7 +314,7 @@ class AccountPandasDumper:
         ) - frozenset(
             # Assets that touch own addresses
             x[:1]
-            for x in balance.xs(self.OWN_LABEL, level=-1, axis=1).columns
+            for x in balance.xs(self.OWN_LABEL, level=1, axis=1).columns
         ).union(
             # Assets with pinned policies
             frozenset(
@@ -359,35 +359,35 @@ class AccountPandasDumper:
         return result
 
     def _column_key(self, utxo, amount):
+        # Index: (asset_id, own, address_name)
         return (
             amount.unit if amount.unit != self.data.LOVELACE_ASSET else self.ADA_ASSET,
+            self.OWN_LABEL
+            if utxo.address in self.data.own_addresses
+            else self.OTHER_LABEL,
             self._truncate(utxo.address)
             if self.raw_values
             else self.address_names.get(
                 utxo.address,
                 self.OTHER_LABEL,
             ),
-            self.OWN_LABEL
-            if utxo.address in self.data.own_addresses
-            else self.OTHER_LABEL,
         )
 
     def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
-        # Index: (asset_id, address_name, own)
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        result[(self.ADA_ASSET, " fees", self.OWN_LABEL)] = np.longlong(
+        result[(self.ADA_ASSET, self.OWN_LABEL, " fees")] = np.longlong(
             transaction.fees
         )
-        result[(self.ADA_ASSET, " deposit", self.OWN_LABEL)] = np.longlong(
+        result[(self.ADA_ASSET, self.OWN_LABEL, " deposit")] = np.longlong(
             transaction.deposit
         )
         if transaction.reward_amount:
-            result[(self.ADA_ASSET, " rewards", self.OWN_LABEL)] = np.longlong(
+            result[(self.ADA_ASSET, self.OWN_LABEL, " rewards")] = np.longlong(
                 transaction.reward_amount
             )
         if transaction.withdrawals:
             result[
-                (self.ADA_ASSET, " rewards withdrawal", self.OWN_LABEL)
+                (self.ADA_ASSET, self.OWN_LABEL, " rewards withdrawal")
             ] = np.negative(
                 functools.reduce(
                     np.add,
@@ -419,10 +419,10 @@ class AccountPandasDumper:
         if not self.unmute:
             self._drop_muted_assets(balance)
         if detail_level == 1:
-            balance.drop(labels=self.OTHER_LABEL, axis=1, level=2, inplace=True)
+            balance.drop(labels=self.OTHER_LABEL, axis=1, level=1, inplace=True)
         balance = (
             balance.T.groupby(
-                level=(0, 1)
+                level=(0, 2)
                 if not (self.raw_values and detail_level > 1)
                 else (0, 1, 2)
             )
@@ -436,7 +436,7 @@ class AccountPandasDumper:
         ]
         if not self.raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
-                [(self.asset_names[c[0]], c[1]) for c in balance.columns]
+                [(self.asset_names[c[0]], c[2]) for c in balance.columns]
             )
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
 
