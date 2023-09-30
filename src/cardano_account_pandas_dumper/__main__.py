@@ -207,7 +207,9 @@ def main():
                 transactions,
                 detail_level=args.detail_level,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
-                    lambda y: "".join(["\\" + hex(ord(y.group(0))).removeprefix("0")]),
+                    lambda y: "".join(
+                        ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]
+                    ),
                     x,
                 ),
             ).replace(np.float64(0), pd.NA).to_excel(
