@@ -6,7 +6,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 keywords = ["Cardano", "Pandas", "report", "wallet"]
-dependencies = ["jstyleson", "pandas", "blockfrost-python", "openpyxl"]
+dependencies = [
+    "jstyleson",
+    "pandas",
+    "blockfrost-python",
+    "openpyxl",
+    "types-openpyxl",
+]
 
 [project.scripts]
 cardano_account_pandas_dumper = "cardano_account_pandas_dumper.__main__:main"

@@ -3,7 +3,17 @@ import datetime
 import functools
 import itertools
 from collections import defaultdict
-from typing import Any, Dict, FrozenSet, List, MutableMapping, Optional, Set, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    List,
+    MutableMapping,
+    Optional,
+    Set,
+    Tuple,
+)
 
 import blockfrost.utils
 import numpy as np
@@ -434,11 +444,6 @@ class AccountPandasDumper:
             np.float_power(10, np.negative(self.asset_decimals[c[0]]))
             for c in balance.columns
         ]
-        if not self.raw_values:
-            balance.columns = pd.MultiIndex.from_tuples(
-                [(self.asset_names[c[0]], c[1]) for c in balance.columns]
-            )
-        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
 
         return balance
 
@@ -446,6 +451,7 @@ class AccountPandasDumper:
         self,
         transactions: pd.Series,
         detail_level: int,
+        text_cleaner: Callable = lambda x: x,
         with_tx_hash: bool = True,
         with_tx_message: bool = True,
         with_total: bool = True,
@@ -458,9 +464,18 @@ class AccountPandasDumper:
             columns.append(transactions.rename("hash").map(lambda x: x.hash))
             total.append("" if with_tx_message else "Total")
         if with_tx_message:
-            columns.append(transactions.rename("message").map(self._format_message))
+            columns.append(
+                transactions.rename("message").map(
+                    lambda x: text_cleaner(self._format_message(x))
+                )
+            )
             total.append("Total")
         balance = self.make_balance_frame(transactions, detail_level)
+        if not self.raw_values:
+            balance.columns = pd.MultiIndex.from_tuples(
+                [(text_cleaner(self.asset_names[c[0]]), c[1]) for c in balance.columns]
+            )
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         frame = pd.concat(columns, axis=1)
         frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(

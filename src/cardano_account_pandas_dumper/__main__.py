@@ -9,6 +9,7 @@ import jstyleson
 import numpy as np
 import pandas as pd
 from blockfrost import ApiError, BlockFrostApi
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
 
@@ -107,7 +108,8 @@ def main():
     if invalid_staking_addresses:
         parser.exit(
             status=1,
-            message=f"Following addresses do not look like valid staking addresses: {' '.join(invalid_staking_addresses)}.",
+            message="Following addresses do not look like valid staking addresses: "
+            + " ".join(invalid_staking_addresses),
         )
     if not any([args.checkpoint_output, args.csv_output, args.xlsx_output]):
         parser.exit(
@@ -191,23 +193,29 @@ def main():
             ),
         ],
     ).rename("transactions")
-    dataframe = reporter.make_transaction_frame(
-        transactions,
-        detail_level=args.detail_level,
-    )
     if args.csv_output:
         try:
-            dataframe.replace(np.float64(0), pd.NA).to_csv(args.csv_output, index=False)
+            reporter.make_transaction_frame(
+                transactions,
+                detail_level=args.detail_level,
+            ).replace(np.float64(0), pd.NA).to_csv(args.csv_output, index=False)
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
     if args.xlsx_output:
         try:
-            dataframe.replace(np.float64(0), pd.NA).to_excel(
+            reporter.make_transaction_frame(
+                transactions,
+                detail_level=args.detail_level,
+                text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
+                    lambda y: "".join(["\\" + hex(ord(y.group(0))).removeprefix("0")]),
+                    x,
+                ),
+            ).replace(np.float64(0), pd.NA).to_excel(
                 args.xlsx_output,
                 index=True,
                 sheet_name=f"Transactions to block {args.to_block}",
                 merge_cells=True,
-                freeze_panes=(3 if args.raw_values else 2, 3),
+                freeze_panes=(3 if args.raw_values else 2, 4),
             )
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
