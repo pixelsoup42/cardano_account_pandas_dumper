@@ -212,7 +212,7 @@ def main():
                     ),
                     x,
                 ),
-            ).replace(np.float64(0), pd.NA).to_excel(
+            ).replace(np.float64(0), pd.NA).reset_index(drop=True).to_excel(
                 args.xlsx_output,
                 index=True,
                 sheet_name=f"Transactions to block {args.to_block}",

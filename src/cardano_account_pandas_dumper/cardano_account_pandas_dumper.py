@@ -477,7 +477,6 @@ class AccountPandasDumper:
             )
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         frame = pd.concat(columns, axis=1)
-        frame.reset_index(drop=True, inplace=True)
         frame.columns = pd.MultiIndex.from_tuples(
             [
                 ("metadata", c) + (len(balance.columns[0]) - 2) * ("",)
