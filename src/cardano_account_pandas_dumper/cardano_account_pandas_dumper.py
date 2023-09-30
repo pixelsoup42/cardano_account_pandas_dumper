@@ -451,10 +451,11 @@ class AccountPandasDumper:
         self,
         transactions: pd.Series,
         detail_level: int,
-        text_cleaner: Callable = lambda x: x,
+        with_rewards: bool,
         with_tx_hash: bool = True,
         with_tx_message: bool = True,
         with_total: bool = True,
+        text_cleaner: Callable = lambda x: x,
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
@@ -462,6 +463,11 @@ class AccountPandasDumper:
         total: List[Any] = [columns[0].max() + self.TRANSACTION_OFFSET]
         if with_tx_hash:
             columns.append(transactions.rename("hash").map(lambda x: x.hash))
+            total.append("" if (with_tx_message or with_rewards) else "Total")
+        if with_rewards:
+            columns.append(
+                transactions.rename("reward").map(lambda x: bool(x.reward_amount))
+            )
             total.append("" if with_tx_message else "Total")
         if with_tx_message:
             columns.append(

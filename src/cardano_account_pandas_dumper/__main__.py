@@ -198,6 +198,7 @@ def main():
             reporter.make_transaction_frame(
                 transactions,
                 detail_level=args.detail_level,
+                with_rewards=not args.no_rewards,
             ).replace(np.float64(0), pd.NA).to_csv(args.csv_output, index=False)
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
@@ -206,6 +207,7 @@ def main():
             reporter.make_transaction_frame(
                 transactions,
                 detail_level=args.detail_level,
+                with_rewards=not args.no_rewards,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
                     lambda y: "".join(
                         ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]
