@@ -444,38 +444,32 @@ class AccountPandasDumper:
             np.float_power(10, np.negative(self.asset_decimals[c[0]]))
             for c in balance.columns
         ]
-
         return balance
 
     def make_transaction_frame(
         self,
         transactions: pd.Series,
         detail_level: int,
+        zero_is_nan: bool,
         with_rewards: bool,
-        with_tx_hash: bool = True,
-        with_tx_message: bool = True,
         with_total: bool = True,
         text_cleaner: Callable = lambda x: x,
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
         columns = [transactions.rename("timestamp").map(self._extract_timestamp)]
-        total: List[Any] = [columns[0].max() + self.TRANSACTION_OFFSET]
-        if with_tx_hash:
-            columns.append(transactions.rename("hash").map(lambda x: x.hash))
-            total.append("" if (with_tx_message or with_rewards) else "Total")
+        columns.append(transactions.rename("hash").map(lambda x: x.hash))
         if with_rewards:
             columns.append(
-                transactions.rename("reward").map(lambda x: bool(x.reward_amount))
-            )
-            total.append("" if with_tx_message else "Total")
-        if with_tx_message:
-            columns.append(
-                transactions.rename("message").map(
-                    lambda x: text_cleaner(self._format_message(x))
+                transactions.rename("reward").map(
+                    lambda x: "True" if x.reward_amount else "False"
                 )
             )
-            total.append("Total")
+        columns.append(
+            transactions.rename("message").map(
+                lambda x: text_cleaner(self._format_message(x))
+            )
+        )
         balance = self.make_balance_frame(transactions, detail_level)
         if not self.raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
@@ -493,9 +487,16 @@ class AccountPandasDumper:
         frame.sort_values(by=frame.columns[0], inplace=True)
         # Add total line at the bottom
         if with_total:
+            total = (
+                [columns[0].max() + self.TRANSACTION_OFFSET, ""]
+                + ([""] if with_rewards else [])
+                + ["Total"]
+            )
             for column in balance.columns:
                 total.append(balance[column].sum())
             frame = pd.concat(
                 [frame, pd.DataFrame(data=[total], columns=frame.columns)]
             )
+        if zero_is_nan:
+            frame.replace(np.float64(0), pd.NA, inplace=True)
         return frame

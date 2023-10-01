@@ -6,7 +6,6 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
-import numpy as np
 import pandas as pd
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -199,7 +198,8 @@ def main():
                 transactions,
                 detail_level=args.detail_level,
                 with_rewards=not args.no_rewards,
-            ).replace(np.float64(0), pd.NA).to_csv(args.csv_output, index=False)
+                zero_is_nan=True,
+            ).to_csv(args.csv_output, index=False)
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
     if args.xlsx_output:
@@ -208,13 +208,14 @@ def main():
                 transactions,
                 detail_level=args.detail_level,
                 with_rewards=not args.no_rewards,
+                zero_is_nan=True,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
                     lambda y: "".join(
                         ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]
                     ),
                     x,
                 ),
-            ).replace(np.float64(0), pd.NA).reset_index(drop=True).to_excel(
+            ).reset_index(drop=True).to_excel(
                 args.xlsx_output,
                 index=True,
                 sheet_name=f"Transactions to block {args.to_block}",
