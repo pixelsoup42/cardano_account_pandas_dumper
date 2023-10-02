@@ -181,7 +181,6 @@ def main():
         truncate_length=args.truncate_length,
         raw_values=args.raw_values,
         unmute=args.unmute,
-        with_rewards=not args.no_rewards,
         detail_level=args.detail_level,
     )
     transactions = pd.concat(

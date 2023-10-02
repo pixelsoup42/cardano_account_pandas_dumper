@@ -155,14 +155,12 @@ class AccountPandasDumper:
         truncate_length: int,
         raw_values: bool,
         unmute: bool,
-        with_rewards: bool,
         detail_level: int,
     ):
         self.data = data
         self.truncate_length = truncate_length
         self.raw_values = raw_values
         self.unmute = unmute
-        self.with_rewards = with_rewards
         self.detail_level = detail_level
         self.address_names = pd.Series(
             {a: " wallet" for a in self.data.own_addresses}
@@ -396,7 +394,7 @@ class AccountPandasDumper:
         result[(self.ADA_ASSET, self.OWN_LABEL, " deposit")] = np.longlong(
             transaction.deposit
         )
-        if self.with_rewards and transaction.reward_amount:
+        if transaction.reward_amount:
             result[(self.ADA_ASSET, self.OWN_LABEL, " rewards")] = np.longlong(
                 transaction.reward_amount
             )
@@ -473,11 +471,6 @@ class AccountPandasDumper:
         frame = pd.DataFrame(
             data=[
                 {"hash": x.hash, "message": text_cleaner(self._format_message(x))}
-                | (
-                    {}
-                    if not self.with_rewards
-                    else {"reward": "True" if x.reward_amount else "False"}
-                )
                 for x in transactions
             ],
             index=transactions.index,
@@ -493,7 +486,7 @@ class AccountPandasDumper:
         frame = frame.join(balance)
         # Add total line at the bottom
         if with_total:
-            total = [""] + ([""] if self.with_rewards else []) + ["Total"]
+            total = ["", "Total"]
             for column in balance.columns:
                 total.append(balance[column].sum())
             frame = pd.concat(
