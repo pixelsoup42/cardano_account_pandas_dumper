@@ -184,23 +184,20 @@ def main():
         with_rewards=not args.no_rewards,
         detail_level=args.detail_level,
     )
-    transactions = (
-        pd.Series(
-            {reporter.extract_timestamp(t): t for t in data_from_api.transactions}
-            | (
-                {}
-                if args.no_rewards
-                else {
-                    reporter.extract_timestamp(t): t
-                    for t in [
-                        reporter.reward_transaction(r) for r in data_from_api.rewards
-                    ]
-                }
-            )
+    transactions = pd.concat(
+        [data_from_api.transactions]
+        + (
+            []
+            if args.no_rewards
+            else [
+                pd.Series(
+                    [reporter.reward_transaction(r) for r in data_from_api.rewards]
+                )
+            ]
         )
-        .rename("transactions")
-        .sort_index()
     )
+    transactions.index = [reporter.extract_timestamp(t) for t in transactions]
+    transactions.sort_index(inplace=True)
     if args.csv_output:
         try:
             reporter.make_transaction_frame(
