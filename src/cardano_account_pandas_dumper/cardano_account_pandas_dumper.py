@@ -155,11 +155,15 @@ class AccountPandasDumper:
         truncate_length: int,
         raw_values: bool,
         unmute: bool,
+        with_rewards: bool,
+        detail_level: int,
     ):
         self.data = data
         self.truncate_length = truncate_length
         self.raw_values = raw_values
         self.unmute = unmute
+        self.with_rewards = with_rewards
+        self.detail_level = detail_level
         self.address_names = pd.Series(
             {a: " wallet" for a in self.data.own_addresses}
             | known_dict.get("addresses", {})
@@ -301,7 +305,8 @@ class AccountPandasDumper:
         )
 
     @classmethod
-    def _extract_timestamp(cls, transaction: blockfrost.utils.Namespace) -> Any:
+    def extract_timestamp(cls, transaction: blockfrost.utils.Namespace) -> Any:
+        """Returns timestamp of transaction."""
         return np.datetime64(
             datetime.datetime.fromtimestamp(transaction.block_time)
         ) + (int(transaction.index) * cls.TRANSACTION_OFFSET)
@@ -391,7 +396,7 @@ class AccountPandasDumper:
         result[(self.ADA_ASSET, self.OWN_LABEL, " deposit")] = np.longlong(
             transaction.deposit
         )
-        if transaction.reward_amount:
+        if self.with_rewards and transaction.reward_amount:
             result[(self.ADA_ASSET, self.OWN_LABEL, " rewards")] = np.longlong(
                 transaction.reward_amount
             )
@@ -418,22 +423,27 @@ class AccountPandasDumper:
 
         return result
 
-    def make_balance_frame(self, transactions: pd.Series, detail_level: int):
+    def make_balance_frame(
+        self,
+        transactions: pd.Series,
+        text_cleaner: Callable = lambda x: x,
+    ):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
             data=[self._transaction_balance(x) for x in transactions],
+            index=transactions.index,
             dtype="Int64",
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         if not self.unmute:
             self._drop_muted_assets(balance)
-        if detail_level == 1:
+        if self.detail_level == 1:
             balance.drop(labels=self.OTHER_LABEL, axis=1, level=1, inplace=True)
         balance = (
             balance.T.groupby(
                 level=(0, 2)
-                if not (self.raw_values and detail_level > 1)
+                if not (self.raw_values and self.detail_level > 1)
                 else (0, 1, 2)
             )
             .sum(numeric_only=True)
@@ -444,39 +454,36 @@ class AccountPandasDumper:
             np.float_power(10, np.negative(self.asset_decimals[c[0]]))
             for c in balance.columns
         ]
-        return balance
-
-    def make_transaction_frame(
-        self,
-        transactions: pd.Series,
-        detail_level: int,
-        zero_is_nan: bool,
-        with_rewards: bool,
-        with_total: bool = True,
-        text_cleaner: Callable = lambda x: x,
-    ) -> pd.DataFrame:
-        """Build a transaction spreadsheet."""
-
-        columns = [transactions.rename("timestamp").map(self._extract_timestamp)]
-        columns.append(transactions.rename("hash").map(lambda x: x.hash))
-        if with_rewards:
-            columns.append(
-                transactions.rename("reward").map(
-                    lambda x: "True" if x.reward_amount else "False"
-                )
-            )
-        columns.append(
-            transactions.rename("message").map(
-                lambda x: text_cleaner(self._format_message(x))
-            )
-        )
-        balance = self.make_balance_frame(transactions, detail_level)
         if not self.raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
                 [(text_cleaner(self.asset_names[c[0]]), c[1]) for c in balance.columns]
             )
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        frame = pd.concat(columns, axis=1)
+        return balance
+
+    def make_transaction_frame(
+        self,
+        transactions: pd.Series,
+        zero_is_nan: bool = True,
+        with_total: bool = True,
+        text_cleaner: Callable = lambda x: x,
+    ) -> pd.DataFrame:
+        """Build a transaction spreadsheet."""
+
+        frame = pd.DataFrame(
+            data=[
+                {"hash": x.hash, "message": text_cleaner(self._format_message(x))}
+                | (
+                    {}
+                    if not self.with_rewards
+                    else {"reward": "True" if x.reward_amount else "False"}
+                )
+                for x in transactions
+            ],
+            index=transactions.index,
+        )
+
+        balance = self.make_balance_frame(transactions, text_cleaner=text_cleaner)
         frame.columns = pd.MultiIndex.from_tuples(
             [
                 ("metadata", c) + (len(balance.columns[0]) - 2) * ("",)
@@ -484,18 +491,22 @@ class AccountPandasDumper:
             ]
         )
         frame = frame.join(balance)
-        frame.sort_values(by=frame.columns[0], inplace=True)
         # Add total line at the bottom
         if with_total:
-            total = (
-                [columns[0].max() + self.TRANSACTION_OFFSET, ""]
-                + ([""] if with_rewards else [])
-                + ["Total"]
-            )
+            total = [""] + ([""] if self.with_rewards else []) + ["Total"]
             for column in balance.columns:
                 total.append(balance[column].sum())
             frame = pd.concat(
-                [frame, pd.DataFrame(data=[total], columns=frame.columns)]
+                [
+                    frame,
+                    pd.DataFrame(
+                        data=[total],
+                        columns=frame.columns,
+                        index=[
+                            frame.index.max() + self.TRANSACTION_OFFSET,
+                        ],
+                    ),
+                ]
             )
         if zero_is_nan:
             frame.replace(np.float64(0), pd.NA, inplace=True)

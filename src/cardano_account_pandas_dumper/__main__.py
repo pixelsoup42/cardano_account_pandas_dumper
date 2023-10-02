@@ -181,45 +181,50 @@ def main():
         truncate_length=args.truncate_length,
         raw_values=args.raw_values,
         unmute=args.unmute,
+        with_rewards=not args.no_rewards,
+        detail_level=args.detail_level,
     )
-    transactions = pd.concat(
-        objs=[
-            data_from_api.transactions,
-            pd.Series(
-                []
+    transactions = (
+        pd.Series(
+            {reporter.extract_timestamp(t): t for t in data_from_api.transactions}
+            | (
+                {}
                 if args.no_rewards
-                else [reporter.reward_transaction(r) for r in data_from_api.rewards]
-            ),
-        ],
-    ).rename("transactions")
+                else {
+                    reporter.extract_timestamp(t): t
+                    for t in [
+                        reporter.reward_transaction(r) for r in data_from_api.rewards
+                    ]
+                }
+            )
+        )
+        .rename("transactions")
+        .sort_index()
+    )
     if args.csv_output:
         try:
             reporter.make_transaction_frame(
                 transactions,
-                detail_level=args.detail_level,
-                with_rewards=not args.no_rewards,
-                zero_is_nan=True,
-            ).to_csv(args.csv_output, index=False)
+            ).to_csv(
+                args.csv_output,
+                index_label="Timestamp",
+            )
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
     if args.xlsx_output:
         try:
             reporter.make_transaction_frame(
                 transactions,
-                detail_level=args.detail_level,
-                with_rewards=not args.no_rewards,
-                zero_is_nan=True,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
                     lambda y: "".join(
                         ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]
                     ),
                     x,
                 ),
-            ).reset_index(drop=True).to_excel(
+            ).to_excel(
                 args.xlsx_output,
-                index=True,
                 sheet_name=f"Transactions to block {args.to_block}",
-                merge_cells=True,
+                index_label="Timestamp",
                 freeze_panes=(3 if args.raw_values else 2, 4),
             )
         except OSError as exception:
