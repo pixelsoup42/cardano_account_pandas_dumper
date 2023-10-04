@@ -277,11 +277,17 @@ class AccountPandasDumper:
         redeemer_scripts: Dict[str, Set] = defaultdict(set)
         for redeemer in tx_obj.redeemers:
             if redeemer.purpose == "spend":
-                redeemer_scripts["Spend:"].add(
+                redeemer_scripts[redeemer.purpose].add(
                     self._format_script(redeemer.script_hash)
                 )
             elif redeemer.purpose == "mint":
-                redeemer_scripts["Mint:"].add(self._format_policy(redeemer.script_hash))
+                redeemer_scripts[redeemer.purpose].add(
+                    self._format_policy(redeemer.script_hash)
+                )
+            else:
+                redeemer_scripts[redeemer.purpose].add(
+                    self._truncate(redeemer.redeemer_data_hash)
+                )
         for k, redeemer_script in redeemer_scripts.items():
             result.extend([k, str(redeemer_script)])
         if not result and all(
