@@ -246,9 +246,7 @@ class AccountPandasDumper:
         for policy, _v in meta_dict.items():
             if policy == "version":
                 continue
-            result += f"{self._format_policy(policy)}:"
-            for asset_name in _v.to_dict().keys():
-                result += f"{asset_name} "
+            result += f"{self._format_policy(policy)}:{_v.to_dict()}"
         return result
 
     def _format_message(self, tx_obj: blockfrost.utils.Namespace) -> str:
@@ -369,6 +367,7 @@ class AccountPandasDumper:
         result.index = -1
         result.fees = "0"
         result.deposit = "0"
+        result.asset_mint_or_burn_count = 0
         result.redeemers = []
         result.hash = None
         result.withdrawals = []
@@ -395,26 +394,26 @@ class AccountPandasDumper:
 
     def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        result[(self.ADA_ASSET, self.OWN_LABEL, " fees")] = np.longlong(
+        result[(self.ADA_ASSET, self.OTHER_LABEL, " fees")] += np.longlong(
             transaction.fees
         )
-        result[(self.ADA_ASSET, self.OWN_LABEL, " deposit")] = np.longlong(
+        result[(self.ADA_ASSET, self.OWN_LABEL, " deposit")] += np.longlong(
             transaction.deposit
         )
         if transaction.reward_amount:
-            result[(self.ADA_ASSET, self.OWN_LABEL, " rewards")] = np.longlong(
+            result[(self.ADA_ASSET, self.OTHER_LABEL, " rewards")] -= np.longlong(
+                transaction.reward_amount
+            )
+            result[(self.ADA_ASSET, self.OWN_LABEL, " withdrawals")] += np.longlong(
                 transaction.reward_amount
             )
         if transaction.withdrawals:
-            result[
-                (self.ADA_ASSET, self.OWN_LABEL, " rewards withdrawal")
-            ] = np.negative(
-                functools.reduce(
-                    np.add,
-                    [np.longlong(w.amount) for w in transaction.withdrawals],
-                    np.longlong(0),
-                )
+            withdrawals = functools.reduce(
+                np.add,
+                [np.longlong(w.amount) for w in transaction.withdrawals],
+                np.longlong(0),
             )
+            result[(self.ADA_ASSET, self.OWN_LABEL, " withdrawals")] -= withdrawals
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
@@ -426,6 +425,24 @@ class AccountPandasDumper:
             for amount in utxo.amount:
                 result[self._column_key(utxo, amount)] += np.longlong(amount.quantity)
 
+        sum_by_asset: MutableMapping[str, np.longlong] = defaultdict(
+            lambda: np.longlong(0)
+        )
+        for key, value in result.items():
+            if key[0] == self.ADA_DECIMALS or not transaction.asset_mint_or_burn_count:
+                sum_by_asset[key[0]] += value
+
+        assert all([v == np.longlong(0) for v in sum_by_asset.values()]), (
+            f"Unbalanced transaction: {transaction.hash if transaction.hash else '-'} : "
+            + f"{self._format_message(transaction)} : "
+            + str(
+                {
+                    f"{self._format_policy(self.data.assets[k].policy_id)}@{self._decode_asset_name(self.data.assets[k])}": v
+                    for k, v in sum_by_asset.items()
+                    if v != np.longlong(0)
+                }
+            )
+        )
         return result
 
     def make_balance_frame(
