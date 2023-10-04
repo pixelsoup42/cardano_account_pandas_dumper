@@ -475,7 +475,7 @@ class AccountPandasDumper:
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
-        frame = pd.DataFrame(
+        msg_frame = pd.DataFrame(
             data=[
                 {"hash": x.hash, "message": text_cleaner(self._format_message(x))}
                 for x in transactions
@@ -483,31 +483,31 @@ class AccountPandasDumper:
             index=transactions.index,
         )
 
-        balance = self.make_balance_frame(transactions, text_cleaner=text_cleaner)
-        frame.columns = pd.MultiIndex.from_tuples(
+        balance_frame = self.make_balance_frame(transactions, text_cleaner=text_cleaner)
+        msg_frame.columns = pd.MultiIndex.from_tuples(
             [
-                ("metadata", c) + (len(balance.columns[0]) - 2) * ("",)
-                for c in frame.columns
+                ("metadata", c) + (len(balance_frame.columns[0]) - 2) * ("",)
+                for c in msg_frame.columns
             ]
         )
-        frame = frame.join(balance)
+        joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
         # Add total line at the bottom
         if with_total:
             total = ["", "Total"]
-            for column in balance.columns:
-                total.append(balance[column].sum())
-            frame = pd.concat(
+            for column in balance_frame.columns:
+                total.append(balance_frame[column].sum())
+            joined_frame = pd.concat(
                 [
-                    frame,
+                    joined_frame,
                     pd.DataFrame(
                         data=[total],
-                        columns=frame.columns,
+                        columns=joined_frame.columns,
                         index=[
-                            frame.index.max() + self.TRANSACTION_OFFSET,
+                            joined_frame.index.max() + self.TRANSACTION_OFFSET,
                         ],
                     ),
                 ]
             )
         if zero_is_nan:
-            frame.replace(np.float64(0), pd.NA, inplace=True)
-        return frame
+            joined_frame.replace(np.float64(0), pd.NA, inplace=True)
+        return joined_frame

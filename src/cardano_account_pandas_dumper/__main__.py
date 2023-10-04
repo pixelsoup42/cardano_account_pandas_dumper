@@ -184,17 +184,16 @@ def main():
         detail_level=args.detail_level,
     )
     transactions = pd.concat(
-        [data_from_api.transactions]
-        + (
-            []
-            if args.no_rewards
-            else [
-                pd.Series(
-                    [reporter.reward_transaction(r) for r in data_from_api.rewards]
-                )
-            ]
-        )
+        [
+            data_from_api.transactions,
+            pd.Series(
+                []
+                if args.no_rewards
+                else [reporter.reward_transaction(r) for r in data_from_api.rewards]
+            ),
+        ]
     )
+
     transactions.index = [reporter.extract_timestamp(t) for t in transactions]
     transactions.sort_index(inplace=True)
     if args.csv_output:
@@ -203,7 +202,6 @@ def main():
                 transactions,
             ).to_csv(
                 args.csv_output,
-                index_label="Timestamp",
             )
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
@@ -220,7 +218,6 @@ def main():
             ).to_excel(
                 args.xlsx_output,
                 sheet_name=f"Transactions to block {args.to_block}",
-                index_label="Timestamp",
                 freeze_panes=(3 if args.raw_values else 2, 3),
             )
         except OSError as exception:
