@@ -221,7 +221,7 @@ def main():
                 args.xlsx_output,
                 sheet_name=f"Transactions to block {args.to_block}",
                 index_label="Timestamp",
-                freeze_panes=(3 if args.raw_values else 2, 4),
+                freeze_panes=(3 if args.raw_values else 2, 3),
             )
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")

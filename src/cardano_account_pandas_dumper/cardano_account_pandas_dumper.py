@@ -246,8 +246,9 @@ class AccountPandasDumper:
         for policy, _v in meta_dict.items():
             if policy == "version":
                 continue
+            result += f"{self._format_policy(policy)}:"
             for asset_name in _v.to_dict().keys():
-                result += f"{self._format_policy(policy)}@{asset_name} "
+                result += f"{asset_name} "
         return result
 
     def _format_message(self, tx_obj: blockfrost.utils.Namespace) -> str:
