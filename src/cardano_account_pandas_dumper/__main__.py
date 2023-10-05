@@ -6,7 +6,6 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
-import pandas as pd
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
@@ -75,7 +74,7 @@ def _create_arg_parser():
     )
     result.add_argument(
         "--unmute",
-        help="Do not mute policies in the mute list and numerical-only metadata.",
+        help="Do not auto-mute anything, do not use muted policies.",
         action="store_true",
     )
     result.add_argument(
@@ -90,9 +89,10 @@ def _create_arg_parser():
         action="store_true",
     )
     result.add_argument(
-        "--no_rewards",
+        "--with_rewards",
         help="Do not add reward transactions.",
-        action="store_true",
+        default=True,
+        type=bool,
     )
     return result
 
@@ -149,7 +149,7 @@ def main():
                 api=api_instance,
                 staking_addresses=staking_addresses_set,
                 to_block=args.to_block,
-                include_rewards=not args.no_rewards,
+                include_rewards=not args.with_rewards,
             )
         except ApiError as api_exception:
             parser.exit(
@@ -183,24 +183,9 @@ def main():
         unmute=args.unmute,
         detail_level=args.detail_level,
     )
-    transactions = pd.concat(
-        [
-            data_from_api.transactions,
-            pd.Series(
-                []
-                if args.no_rewards
-                else [reporter.reward_transaction(r) for r in data_from_api.rewards]
-            ),
-        ]
-    )
-
-    transactions.index = [reporter.extract_timestamp(t) for t in transactions]
-    transactions.sort_index(inplace=True)
     if args.csv_output:
         try:
-            reporter.make_transaction_frame(
-                transactions,
-            ).to_csv(
+            reporter.make_transaction_frame().to_csv(
                 args.csv_output,
             )
         except OSError as exception:
@@ -208,7 +193,6 @@ def main():
     if args.xlsx_output:
         try:
             reporter.make_transaction_frame(
-                transactions,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
                     lambda y: "".join(
                         ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]

@@ -184,6 +184,20 @@ class AccountPandasDumper:
         self.pinned_policies = pd.Series(known_dict.get("pinned_policies", []))
         self.scripts = pd.Series(known_dict.get("scripts", {}))
         self.labels = pd.Series(known_dict.get("labels", {}))
+        transactions = pd.concat(
+            [
+                self.data.transactions,
+                pd.Series([self.reward_transaction(r) for r in self.data.rewards]),
+            ]
+        )
+
+        transactions.index = pd.Index(
+            [self.extract_timestamp(t) for t in transactions],
+            dtype="datetime64[ns]",
+        )
+        transactions.sort_index(inplace=True)
+        assert len(transactions) == len(self.data.transactions) + len(self.data.rewards)
+        self.transactions = transactions
 
     def _truncate(self, value: str) -> str:
         return (
@@ -308,7 +322,9 @@ class AccountPandasDumper:
         )
 
     @classmethod
-    def extract_timestamp(cls, transaction: blockfrost.utils.Namespace) -> Any:
+    def extract_timestamp(
+        cls, transaction: blockfrost.utils.Namespace
+    ) -> np.datetime64:
         """Returns timestamp of transaction."""
         return np.datetime64(
             datetime.datetime.fromtimestamp(transaction.block_time)
@@ -429,15 +445,20 @@ class AccountPandasDumper:
             lambda: np.longlong(0)
         )
         for key, value in result.items():
-            if key[0] == self.ADA_DECIMALS or not transaction.asset_mint_or_burn_count:
-                sum_by_asset[key[0]] += value
-
-        assert all([v == np.longlong(0) for v in sum_by_asset.values()]), (
+            sum_by_asset[key[0]] += value
+        sum_by_asset = {k: v for k, v in sum_by_asset.items() if v}
+        assert (
+            self.ADA_ASSET not in sum_by_asset
+            and len(sum_by_asset) == transaction.asset_mint_or_burn_count
+        ), (
             f"Unbalanced transaction: {transaction.hash if transaction.hash else '-'} : "
             + f"{self._format_message(transaction)} : "
             + str(
                 {
-                    f"{self._format_policy(self.data.assets[k].policy_id)}@{self._decode_asset_name(self.data.assets[k])}": v
+                    (
+                        f"{self._format_policy(self.data.assets[k].policy_id)}@"
+                        + f"{self._decode_asset_name(self.data.assets[k])}"
+                    ): v
                     for k, v in sum_by_asset.items()
                     if v != np.longlong(0)
                 }
@@ -447,13 +468,12 @@ class AccountPandasDumper:
 
     def make_balance_frame(
         self,
-        transactions: pd.Series,
         text_cleaner: Callable = lambda x: x,
     ):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
-            data=[self._transaction_balance(x) for x in transactions],
-            index=transactions.index,
+            data=[self._transaction_balance(x) for x in self.transactions],
+            index=self.transactions.index,
             dtype="Int64",
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
@@ -485,7 +505,6 @@ class AccountPandasDumper:
 
     def make_transaction_frame(
         self,
-        transactions: pd.Series,
         zero_is_nan: bool = True,
         with_total: bool = True,
         text_cleaner: Callable = lambda x: x,
@@ -495,18 +514,22 @@ class AccountPandasDumper:
         msg_frame = pd.DataFrame(
             data=[
                 {"hash": x.hash, "message": text_cleaner(self._format_message(x))}
-                for x in transactions
+                for x in self.transactions
             ],
-            index=transactions.index,
+            index=self.transactions.index,
+            dtype="string",
         )
 
-        balance_frame = self.make_balance_frame(transactions, text_cleaner=text_cleaner)
+        balance_frame = self.make_balance_frame(text_cleaner=text_cleaner)
         msg_frame.columns = pd.MultiIndex.from_tuples(
             [
                 ("metadata", c) + (len(balance_frame.columns[0]) - 2) * ("",)
                 for c in msg_frame.columns
             ]
         )
+        assert len(msg_frame) == len(
+            balance_frame
+        ), f"Frame lengths do not match {msg_frame=!s} , {balance_frame=!s}"
         joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
         # Add total line at the bottom
         if with_total:
