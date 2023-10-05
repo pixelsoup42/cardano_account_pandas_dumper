@@ -1,6 +1,5 @@
 """ Cardano Account To Pandas Dumper."""
 import datetime
-import functools
 import itertools
 from collections import defaultdict
 from typing import (
@@ -171,20 +170,14 @@ class AccountPandasDumper:
             {asset.asset: self._decode_asset_name(asset) for asset in self.data.assets}
             | {self.ADA_ASSET: self.ADA_ASSET}
         )
-        self.asset_scale = pd.Series(
+        self.asset_decimals = pd.Series(
             {
-                asset.asset: np.float_power(
-                    10,
-                    np.negative(
-                        np.longlong(asset.metadata.decimals or 0)
-                        if hasattr(asset, "metadata")
-                        and hasattr(asset.metadata, "decimals")
-                        else 0
-                    ),
-                )
+                asset.asset: np.longlong(asset.metadata.decimals or 0)
+                if hasattr(asset, "metadata") and hasattr(asset.metadata, "decimals")
+                else 0
                 for asset in self.data.assets
             }
-            | {self.ADA_ASSET: np.float_power(10, np.negative(self.ADA_DECIMALS))}
+            | {self.ADA_ASSET: self.ADA_DECIMALS}
         )
         self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
         self.pinned_policies = pd.Series(known_dict.get("pinned_policies", []))
@@ -434,14 +427,14 @@ class AccountPandasDumper:
                     f" withdrawals-{self._truncate(transaction.reward_address)}",
                 )
             ] += np.longlong(transaction.reward_amount)
-        for w in transaction.withdrawals:
+        for _w in transaction.withdrawals:
             result[
                 (
                     self.ADA_ASSET,
                     self.OWN_LABEL,
-                    f" withdrawals-{self._truncate(w.address)}",
+                    f" withdrawals-{self._truncate(_w.address)}",
                 )
-            ] -= np.longlong(w.amount)
+            ] -= np.longlong(_w.amount)
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
@@ -480,6 +473,7 @@ class AccountPandasDumper:
 
     def make_balance_frame(
         self,
+        with_total: bool,
         text_cleaner: Callable = lambda x: x,
     ):
         """Make DataFrame with transaction balances."""
@@ -504,12 +498,37 @@ class AccountPandasDumper:
             .T
         )
 
-        balance = balance * [self.asset_scale[c[0]] for c in balance.columns]
+        # Scale by asset decimals
+        balance = balance * [
+            np.float_power(
+                10,
+                np.negative(self.asset_decimals[c[0]]),
+            )
+            for c in balance.columns
+        ]
+        if with_total:
+            balance = pd.concat(
+                [
+                    balance,
+                    pd.DataFrame(
+                        data=[[balance[column].sum() for column in balance.columns]],
+                        columns=balance.columns,
+                        index=[
+                            balance.index.max() + self.TRANSACTION_OFFSET,
+                        ],
+                    ),
+                ]
+            )
+        balance = pd.concat(
+            [balance[c].round(self.asset_decimals[c[0]]) for c in balance.columns],
+            axis=1,
+        )
+
         if not self.raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
                 [(text_cleaner(self.asset_names[c[0]]), c[1]) for c in balance.columns]
             )
-        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
+            balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         return balance
 
     def make_transaction_frame(
@@ -528,8 +547,22 @@ class AccountPandasDumper:
             index=self.transactions.index,
             dtype="string",
         )
-
-        balance_frame = self.make_balance_frame(text_cleaner=text_cleaner)
+        if with_total:
+            msg_frame = pd.concat(
+                [
+                    msg_frame,
+                    pd.DataFrame(
+                        data=[["", "Total"]],
+                        columns=msg_frame.columns,
+                        index=[
+                            msg_frame.index.max() + self.TRANSACTION_OFFSET,
+                        ],
+                    ),
+                ]
+            )
+        balance_frame = self.make_balance_frame(
+            with_total=with_total, text_cleaner=text_cleaner
+        )
         msg_frame.columns = pd.MultiIndex.from_tuples(
             [
                 (c,) + (len(balance_frame.columns[0]) - 1) * ("",)
@@ -540,23 +573,6 @@ class AccountPandasDumper:
             balance_frame
         ), f"Frame lengths do not match {msg_frame=!s} , {balance_frame=!s}"
         joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
-        # Add total line at the bottom
-        if with_total:
-            total = ["", "Total"]
-            for column in balance_frame.columns:
-                total.append(balance_frame[column].sum())
-            joined_frame = pd.concat(
-                [
-                    joined_frame,
-                    pd.DataFrame(
-                        data=[total],
-                        columns=joined_frame.columns,
-                        index=[
-                            joined_frame.index.max() + self.TRANSACTION_OFFSET,
-                        ],
-                    ),
-                ]
-            )
         if zero_is_nan:
             joined_frame.replace(np.float64(0), pd.NA, inplace=True)
         return joined_frame
