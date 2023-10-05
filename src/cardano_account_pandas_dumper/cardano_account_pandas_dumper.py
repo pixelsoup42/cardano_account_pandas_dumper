@@ -259,7 +259,9 @@ class AccountPandasDumper:
         for policy, _v in meta_dict.items():
             if policy == "version":
                 continue
-            result += f"{self._format_policy(policy)}:{_v.to_dict()}"
+            result += f"{self._format_policy(policy)}:"
+            for asset_name in _v.to_dict().keys():
+                result += f"{asset_name} "
         return result
 
     def _format_message(self, tx_obj: blockfrost.utils.Namespace) -> str:
@@ -497,15 +499,6 @@ class AccountPandasDumper:
             .sum(numeric_only=True)
             .T
         )
-
-        # Scale by asset decimals
-        balance = balance * [
-            np.float_power(
-                10,
-                np.negative(self.asset_decimals[c[0]]),
-            )
-            for c in balance.columns
-        ]
         if with_total:
             balance = pd.concat(
                 [
@@ -519,8 +512,19 @@ class AccountPandasDumper:
                     ),
                 ]
             )
+
         balance = pd.concat(
-            [balance[c].round(self.asset_decimals[c[0]]) for c in balance.columns],
+            [
+                balance[c]
+                .mul(
+                    np.float_power(
+                        10,
+                        np.negative(self.asset_decimals[c[0]]),
+                    )
+                )
+                .round(self.asset_decimals[c[0]])
+                for c in balance.columns
+            ],
             axis=1,
         )
 
