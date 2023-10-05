@@ -132,9 +132,7 @@ class AccountData:
             transaction.reward_amount = None
 
             result_list.append(transaction)
-        return pd.Series(
-            name="Transactions", data={t.hash: t for t in result_list}
-        ).sort_index()
+        return pd.Series(name="Transactions", data=result_list)
 
 
 class AccountPandasDumper:
