@@ -161,7 +161,7 @@ def main():
                 api=api_instance,
                 staking_addresses=staking_addresses_set,
                 to_block=args.to_block,
-                include_rewards=not args.with_rewards,
+                include_rewards=args.with_rewards,
             )
         except ApiError as api_exception:
             parser.exit(
