@@ -169,11 +169,17 @@ class AccountPandasDumper:
             {asset.asset: self._decode_asset_name(asset) for asset in self.data.assets}
             | {self.ADA_ASSET: self.ADA_ASSET}
         )
-        self.asset_decimals = pd.Series(
+        self.asset_scale = pd.Series(
             {
-                asset.asset: np.longlong(asset.metadata.decimals or 0)
-                if hasattr(asset, "metadata") and hasattr(asset.metadata, "decimals")
-                else 0
+                asset.asset: np.float_power(
+                    10,
+                    np.negative(
+                        np.longlong(asset.metadata.decimals or 0)
+                        if hasattr(asset, "metadata")
+                        and hasattr(asset.metadata, "decimals")
+                        else 0
+                    ),
+                )
                 for asset in self.data.assets
             }
             | {self.ADA_ASSET: self.ADA_DECIMALS}
@@ -490,10 +496,7 @@ class AccountPandasDumper:
             .T
         )
 
-        balance = balance * [
-            np.float_power(10, np.negative(self.asset_decimals[c[0]]))
-            for c in balance.columns
-        ]
+        balance = balance * [self.asset_scale[c[0]] for c in balance.columns]
         if not self.raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
                 [(text_cleaner(self.asset_names[c[0]]), c[1]) for c in balance.columns]
@@ -521,7 +524,7 @@ class AccountPandasDumper:
         balance_frame = self.make_balance_frame(text_cleaner=text_cleaner)
         msg_frame.columns = pd.MultiIndex.from_tuples(
             [
-                ("metadata", c) + (len(balance_frame.columns[0]) - 2) * ("",)
+                (c,) + (len(balance_frame.columns[0]) - 1) * ("",)
                 for c in msg_frame.columns
             ]
         )
