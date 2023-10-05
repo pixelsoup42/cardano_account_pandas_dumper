@@ -184,7 +184,7 @@ class AccountPandasDumper:
                 )
                 for asset in self.data.assets
             }
-            | {self.ADA_ASSET: self.ADA_DECIMALS}
+            | {self.ADA_ASSET: np.float_power(10, np.negative(self.ADA_DECIMALS))}
         )
         self.muted_policies = pd.Series(known_dict.get("muted_policies", []))
         self.pinned_policies = pd.Series(known_dict.get("pinned_policies", []))
@@ -382,6 +382,7 @@ class AccountPandasDumper:
             )
         ]
         result.reward_amount = reward[1].amount
+        result.reward_address = reward[0]
         epoch = self.data.epochs[
             reward[1].epoch + 1
         ]  # Time is right before start of next epoch.
@@ -426,16 +427,21 @@ class AccountPandasDumper:
             result[(self.ADA_ASSET, self.OTHER_LABEL, " rewards")] -= np.longlong(
                 transaction.reward_amount
             )
-            result[(self.ADA_ASSET, self.OWN_LABEL, " withdrawals")] += np.longlong(
-                transaction.reward_amount
-            )
-        if transaction.withdrawals:
-            withdrawals = functools.reduce(
-                np.add,
-                [np.longlong(w.amount) for w in transaction.withdrawals],
-                np.longlong(0),
-            )
-            result[(self.ADA_ASSET, self.OWN_LABEL, " withdrawals")] -= withdrawals
+            result[
+                (
+                    self.ADA_ASSET,
+                    self.OWN_LABEL,
+                    f" withdrawals-{self._truncate(transaction.reward_address)}",
+                )
+            ] += np.longlong(transaction.reward_amount)
+        for w in transaction.withdrawals:
+            result[
+                (
+                    self.ADA_ASSET,
+                    self.OWN_LABEL,
+                    f" withdrawals-{self._truncate(w.address)}",
+                )
+            ] -= np.longlong(w.amount)
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
