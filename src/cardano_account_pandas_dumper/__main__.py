@@ -90,7 +90,19 @@ def _create_arg_parser():
     )
     result.add_argument(
         "--with_rewards",
-        help="Do not add reward transactions.",
+        help="Add synthetic transactions for rewards.",
+        default=True,
+        type=bool,
+    )
+    result.add_argument(
+        "--with_total",
+        help="Add line with totals for each column at the bottom of the spreadsheet.",
+        default=True,
+        type=bool,
+    )
+    result.add_argument(
+        "--zero_is_nan",
+        help="Convert zero values to NaN in spreadsheet (in order to display empty cells instead of 0).",
         default=True,
         type=bool,
     )
@@ -185,7 +197,9 @@ def main():
     )
     if args.csv_output:
         try:
-            reporter.make_transaction_frame().to_csv(
+            reporter.make_transaction_frame(
+                with_total=args.with_total, zero_is_nan=args.zero_is_nan
+            ).to_csv(
                 args.csv_output,
             )
         except OSError as exception:
@@ -193,6 +207,8 @@ def main():
     if args.xlsx_output:
         try:
             reporter.make_transaction_frame(
+                with_total=args.with_total,
+                zero_is_nan=args.zero_is_nan,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
                     lambda y: "".join(
                         ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]
