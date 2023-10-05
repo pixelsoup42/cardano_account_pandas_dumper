@@ -102,7 +102,7 @@ def _create_arg_parser():
     )
     result.add_argument(
         "--zero_is_nan",
-        help="Convert zero values to NaN in spreadsheet (in order to display empty cells instead of 0).",
+        help="Convert zero values to NaN in spreadsheet (to display empty cells instead of 0).",
         default=True,
         type=bool,
     )
