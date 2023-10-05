@@ -83,7 +83,9 @@ class AccountData:
                 )
             ]
         )
-        self.transactions = self._transaction_data(api)
+        self.transactions = pd.Series(
+            name="Transactions", data=self._transaction_data(api)
+        )
         self.assets = pd.Series(
             name="Assets",
             data={
@@ -91,7 +93,7 @@ class AccountData:
                 for a in frozenset(
                     [
                         a.unit
-                        for tx_obj in self.transactions  # pylint: disable=not-an-iterable
+                        for tx_obj in self.transactions
                         for i in (tx_obj.utxos.inputs + tx_obj.utxos.outputs)
                         for a in i.amount
                     ]
@@ -102,7 +104,7 @@ class AccountData:
     def _transaction_data(
         self,
         api: BlockFrostApi,
-    ) -> pd.Series:
+    ) -> List[blockfrost.utils.Namespace]:
         result_list = []
         for tx_hash in frozenset(
             [
@@ -132,7 +134,7 @@ class AccountData:
             transaction.reward_amount = None
 
             result_list.append(transaction)
-        return pd.Series(name="Transactions", data=result_list)
+        return result_list
 
 
 class AccountPandasDumper:
