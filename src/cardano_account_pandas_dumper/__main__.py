@@ -9,7 +9,6 @@ import jstyleson
 import matplotlib.pyplot as plt
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
-
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
 
 # Error codes due to project key rate limiting or capping
@@ -103,12 +102,6 @@ def _create_arg_parser():
     result.add_argument(
         "--with_total",
         help="Add line with totals for each column at the bottom of the spreadsheet.",
-        default=True,
-        type=bool,
-    )
-    result.add_argument(
-        "--zero_is_nan",
-        help="Convert zero values to NaN in spreadsheet (to display empty cells instead of 0).",
         default=True,
         type=bool,
     )
@@ -214,7 +207,6 @@ def main():
         try:
             frame = reporter.make_transaction_frame(
                 with_total=args.with_total,
-                zero_is_nan=args.zero_is_nan,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
                     lambda y: "".join(
                         ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]
@@ -235,9 +227,14 @@ def main():
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
     if args.plot:
-        plt.figure(layout="constrained")
         balance = reporter.make_balance_frame(with_total=False).cumsum()
         balance.plot(logy=True)
+        plt.legend(
+            bbox_to_anchor=(1, 1),
+            fontsize="small",
+        )
+        plt.suptitle(f"Asset balances until block {args.to_block}.")
+        plt.show()
     print("Done.")
 
 

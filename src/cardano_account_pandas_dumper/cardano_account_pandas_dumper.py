@@ -497,6 +497,7 @@ class AccountPandasDumper:
         else:
             group = (0, 2)
         balance = balance.T.groupby(level=group).sum(numeric_only=True).T
+        balance[balance == 0] = pd.NA
         if with_total:
             balance = pd.concat(
                 [
@@ -541,7 +542,6 @@ class AccountPandasDumper:
 
     def make_transaction_frame(
         self,
-        zero_is_nan: bool = True,
         with_total: bool = True,
         text_cleaner: Callable = lambda x: x,
     ) -> pd.DataFrame:
@@ -582,6 +582,4 @@ class AccountPandasDumper:
             balance_frame
         ), f"Frame lengths do not match {msg_frame=!s} , {balance_frame=!s}"
         joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
-        if zero_is_nan:
-            joined_frame.replace(np.float64(0), pd.NA, inplace=True)
         return joined_frame
