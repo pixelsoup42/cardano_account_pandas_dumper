@@ -206,7 +206,7 @@ def main():
             warnings.warn(f"Failed to write CSV file: {exception}")
     if args.xlsx_output:
         try:
-            reporter.make_transaction_frame(
+            frame = reporter.make_transaction_frame(
                 with_total=args.with_total,
                 zero_is_nan=args.zero_is_nan,
                 text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
@@ -215,10 +215,16 @@ def main():
                     ),
                     x,
                 ),
-            ).to_excel(
+            )
+            frame.to_excel(
                 args.xlsx_output,
                 sheet_name=f"Transactions to block {args.to_block}",
-                freeze_panes=(3 if args.raw_values else 2, 3),
+                freeze_panes=(
+                    len(frame.columns[0]) + 1
+                    if isinstance(type(frame.columns[0]), tuple)
+                    else 2,
+                    3,
+                ),
             )
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
