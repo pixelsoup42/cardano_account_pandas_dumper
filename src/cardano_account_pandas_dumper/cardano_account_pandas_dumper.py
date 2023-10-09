@@ -12,6 +12,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    cast,
 )
 
 import blockfrost.utils
@@ -488,17 +489,14 @@ class AccountPandasDumper:
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         if not self.unmute:
             self._drop_muted_assets(balance)
+
         if self.detail_level == 1:
-            balance.drop(labels=self.OTHER_LABEL, axis=1, level=1, inplace=True)
-        balance = (
-            balance.T.groupby(
-                level=(0, 2)
-                if not (self.raw_values and self.detail_level > 1)
-                else (0, 1, 2)
-            )
-            .sum(numeric_only=True)
-            .T
-        )
+            group: Tuple = (0, 1)
+        elif self.raw_values:
+            group = (0, 1, 2)
+        else:
+            group = (0, 2)
+        balance = balance.T.groupby(level=group).sum(numeric_only=True).T
         if with_total:
             balance = pd.concat(
                 [
@@ -530,10 +528,16 @@ class AccountPandasDumper:
 
         if not self.raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
-                [(text_cleaner(self.asset_names[c[0]]), c[1]) for c in balance.columns]
+                [
+                    (text_cleaner(self.asset_names[c[0]]),) + cast(tuple, c)[1:]
+                    for c in balance.columns
+                ]
             )
             balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        return balance
+        if self.detail_level == 1:
+            return balance.xs(self.OWN_LABEL, level=1, axis=1)
+        else:
+            return balance
 
     def make_transaction_frame(
         self,
@@ -567,12 +571,13 @@ class AccountPandasDumper:
         balance_frame = self.make_balance_frame(
             with_total=with_total, text_cleaner=text_cleaner
         )
-        msg_frame.columns = pd.MultiIndex.from_tuples(
-            [
-                (c,) + (len(balance_frame.columns[0]) - 1) * ("",)
-                for c in msg_frame.columns
-            ]
-        )
+        if self.detail_level > 1:
+            msg_frame.columns = pd.MultiIndex.from_tuples(
+                [
+                    (c,) + (len(balance_frame.columns[0]) - 1) * ("",)
+                    for c in msg_frame.columns
+                ]
+            )
         assert len(msg_frame) == len(
             balance_frame
         ), f"Frame lengths do not match {msg_frame=!s} , {balance_frame=!s}"
