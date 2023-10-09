@@ -6,6 +6,7 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
+import matplotlib.pyplot as plt
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
@@ -67,6 +68,11 @@ def _create_arg_parser():
         type=argparse.FileType("wb"),
     )
     result.add_argument(
+        "--plot",
+        help="Draw a plot of balance over time.",
+        action="store_true",
+    )
+    result.add_argument(
         "--detail_level",
         help="Level of detail of report (1=only own addresses, 2=other addresses as well).",
         default=1,
@@ -122,11 +128,11 @@ def main():
             message="Following addresses do not look like valid staking addresses: "
             + " ".join(invalid_staking_addresses),
         )
-    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output]):
+    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output, args.plot]):
         parser.exit(
             status=1,
             message="No output specified, neeed at least one of --checkpoint_output,"
-            + " --csv_output, --xlsx_output.\n",
+            + " --csv_output, --xlsx_output, --plot.\n",
         )
     known_dict_from_file = jstyleson.load(args.known_file) if args.known_file else {}
     staking_addresses_set = frozenset(args.staking_address)
@@ -228,6 +234,10 @@ def main():
             )
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
+    if args.plot:
+        plt.figure(layout="constrained")
+        balance = reporter.make_balance_frame(with_total=False).cumsum()
+        balance.plot(logy=True)
     print("Done.")
 
 

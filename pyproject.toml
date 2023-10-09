@@ -5,12 +5,22 @@ description = "Create a spreadsheet with the owned amount of any Cardano asset a
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-keywords = ["Cardano", "Pandas", "report", "wallet"]
+keywords = [
+    "asset",
+    "balance",
+    "Cardano",
+    "graphic",
+    "Pandas",
+    "report",
+    "transaction",
+    "wallet",
+]
 dependencies = [
-    "jstyleson",
-    "pandas",
     "blockfrost-python",
+    "jstyleson",
+    "matplotlib",
     "openpyxl",
+    "pandas",
     "types-openpyxl",
 ]
 
