@@ -153,13 +153,11 @@ class AccountPandasDumper:
         data: AccountData,
         known_dict: Any,
         truncate_length: int,
-        raw_values: bool,
         unmute: bool,
         detail_level: int,
     ):
         self.data = data
         self.truncate_length = truncate_length
-        self.raw_values = raw_values
         self.unmute = unmute
         self.detail_level = detail_level
         self.address_names = pd.Series(
@@ -169,7 +167,6 @@ class AccountPandasDumper:
         self.policy_names = pd.Series(known_dict.get("policies", {}))
         self.asset_names = pd.Series(
             {asset.asset: self._decode_asset_name(asset) for asset in self.data.assets}
-            | {self.ADA_ASSET: self.ADA_ASSET}
         )
         self.asset_decimals = pd.Series(
             {
@@ -314,14 +311,10 @@ class AccountPandasDumper:
         return " ".join(result)
 
     def _format_script(self, script: str) -> str:
-        return ({} if self.raw_values else self.scripts).get(
-            script, self._truncate(script)
-        )
+        return self.scripts.get(script, self._truncate(script))
 
     def _format_policy(self, policy: str) -> Optional[str]:
-        return ({} if self.raw_values else self.policy_names).get(
-            policy, self._truncate(policy)
-        )
+        return self.policy_names.get(policy, self._truncate(policy))
 
     @classmethod
     def extract_timestamp(
@@ -396,7 +389,12 @@ class AccountPandasDumper:
         result.utxos.nonref_inputs = []
         return result
 
-    def _column_key(self, utxo, amount):
+    def _column_key(
+        self,
+        utxo,
+        amount,
+        raw_values: bool,
+    ):
         # Index: (asset_id, own, address_name)
         return (
             amount.unit if amount.unit != self.data.LOVELACE_ASSET else self.ADA_ASSET,
@@ -404,14 +402,18 @@ class AccountPandasDumper:
             if utxo.address in self.data.own_addresses
             else self.OTHER_LABEL,
             self._truncate(utxo.address)
-            if self.raw_values
+            if raw_values
             else self.address_names.get(
                 utxo.address,
                 self.OTHER_LABEL,
             ),
         )
 
-    def _transaction_balance(self, transaction: blockfrost.utils.Namespace) -> Any:
+    def _transaction_balance(
+        self,
+        transaction: blockfrost.utils.Namespace,
+        raw_values: bool,
+    ) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[(self.ADA_ASSET, self.OTHER_LABEL, " fees")] += np.longlong(
             transaction.fees
@@ -441,13 +443,15 @@ class AccountPandasDumper:
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
-                    result[self._column_key(utxo, amount)] -= np.longlong(
+                    result[self._column_key(utxo, amount, raw_values)] -= np.longlong(
                         amount.quantity
                     )
 
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
-                result[self._column_key(utxo, amount)] += np.longlong(amount.quantity)
+                result[self._column_key(utxo, amount, raw_values)] += np.longlong(
+                    amount.quantity
+                )
 
         sum_by_asset: MutableMapping[str, np.longlong] = defaultdict(
             lambda: np.longlong(0)
@@ -477,11 +481,12 @@ class AccountPandasDumper:
     def make_balance_frame(
         self,
         with_total: bool,
+        raw_values: bool,
         text_cleaner: Callable = lambda x: x,
     ):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
-            data=[self._transaction_balance(x) for x in self.transactions],
+            data=[self._transaction_balance(x, raw_values) for x in self.transactions],
             index=self.transactions.index,
             dtype="Int64",
         )
@@ -492,7 +497,7 @@ class AccountPandasDumper:
 
         if self.detail_level == 1:
             group: Tuple = (0, 1)
-        elif self.raw_values:
+        elif raw_values:
             group = (0, 1, 2)
         else:
             group = (0, 2)
@@ -527,10 +532,11 @@ class AccountPandasDumper:
             axis=1,
         )
 
-        if not self.raw_values:
+        if not raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
                 [
-                    (text_cleaner(self.asset_names[c[0]]),) + cast(tuple, c)[1:]
+                    (text_cleaner(self.asset_names.get(c[0], c[0])),)
+                    + cast(tuple, c)[1:]
                     for c in balance.columns
                 ]
             )
@@ -542,6 +548,7 @@ class AccountPandasDumper:
 
     def make_transaction_frame(
         self,
+        raw_values: bool,
         with_total: bool = True,
         text_cleaner: Callable = lambda x: x,
     ) -> pd.DataFrame:
@@ -569,7 +576,7 @@ class AccountPandasDumper:
                 ]
             )
         balance_frame = self.make_balance_frame(
-            with_total=with_total, text_cleaner=text_cleaner
+            with_total=with_total, text_cleaner=text_cleaner, raw_values=raw_values
         )
         if self.detail_level > 1:
             msg_frame.columns = pd.MultiIndex.from_tuples(

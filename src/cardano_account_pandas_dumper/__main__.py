@@ -6,6 +6,7 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
+from matplotlib.patches import Rectangle
 import matplotlib.pyplot as plt
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -190,14 +191,14 @@ def main():
         data=data_from_api,
         known_dict=known_dict_from_file,
         truncate_length=args.truncate_length,
-        raw_values=args.raw_values,
         unmute=args.unmute,
         detail_level=args.detail_level,
     )
     if args.csv_output:
         try:
             reporter.make_transaction_frame(
-                with_total=args.with_total, zero_is_nan=args.zero_is_nan
+                with_total=args.with_total,
+                raw_values=args.raw_values,
             ).to_csv(
                 args.csv_output,
             )
@@ -213,6 +214,7 @@ def main():
                     ),
                     x,
                 ),
+                raw_values=args.raw_values,
             )
             frame.to_excel(
                 args.xlsx_output,
@@ -227,9 +229,17 @@ def main():
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
     if args.plot:
-        balance = reporter.make_balance_frame(with_total=False).cumsum()
+        balance = reporter.make_balance_frame(
+            with_total=False, raw_values=True
+        ).cumsum()
         balance.plot(logy=True)
+
         plt.legend(
+            [
+                Rectangle(xy=(0, 0), width=10, height=10, color=(0.9, 0.9, 0.7))
+                for l in balance.columns
+            ],
+            [reporter.asset_names.get(c, c) for c in balance.columns],
             bbox_to_anchor=(1, 1),
             fontsize="small",
         )
