@@ -617,15 +617,15 @@ class AccountPandasDumper:
                 and hasattr(a.metadata, "logo")
                 and a.metadata.logo
             )
-            else None
+            else (
+                os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
+                )
+                if a is None  # ADA
+                else None
+            )
             for a in assets
         ]
-        assert (
-            balance.columns[0] == self.ADA_ASSET
-        ), f"ADA not the first asset in {balance.columns}"
-        logos[0] = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
-        )
 
         mpl.pyplot.legend(
             [
