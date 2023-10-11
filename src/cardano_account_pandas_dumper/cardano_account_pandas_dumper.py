@@ -1,7 +1,10 @@
 """ Cardano Account To Pandas Dumper."""
 import datetime
 import itertools
+from base64 import b64decode
 from collections import defaultdict
+from io import BytesIO
+import os
 from typing import (
     Any,
     Callable,
@@ -16,6 +19,7 @@ from typing import (
 )
 
 import blockfrost.utils
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 from blockfrost import BlockFrostApi
@@ -590,3 +594,45 @@ class AccountPandasDumper:
         ), f"Frame lengths do not match {msg_frame=!s} , {balance_frame=!s}"
         joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
         return joined_frame
+
+    def plot_balance(self):
+        balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
+        balance.sort_index(
+            axis=1,
+            level=0,
+            sort_remaining=True,
+            inplace=True,
+            key=lambda i: [self.asset_names.get(x, x) for x in i],
+        )
+
+        balance.plot(
+            logy=True, title=f"Asset balances until block {self.data.to_block}."
+        )
+        assets = [self.data.assets.get(c, None) for c in balance.columns]
+        logos = [
+            BytesIO(b64decode(a.metadata.logo))
+            if (
+                a
+                and hasattr(a, "metadata")
+                and hasattr(a.metadata, "logo")
+                and a.metadata.logo
+            )
+            else None
+            for a in assets
+        ]
+        assert (
+            balance.columns[0] == self.ADA_ASSET
+        ), f"ADA not the first asset in {balance.columns}"
+        logos[0] = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
+        )
+
+        mpl.pyplot.legend(
+            [
+                mpl.patches.Rectangle(xy=(0, 0), width=10, height=10, color=f"C{i}")
+                for i in range(len(balance.columns))
+            ],
+            [self.asset_names.get(c, c) for c in balance.columns],
+            bbox_to_anchor=(1, 1),
+            fontsize="small",
+        )

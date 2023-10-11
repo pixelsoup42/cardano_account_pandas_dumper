@@ -6,8 +6,7 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
-from matplotlib.patches import Rectangle
-import matplotlib.pyplot as plt
+import matplotlib as mpl
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
@@ -229,22 +228,8 @@ def main():
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
     if args.plot:
-        balance = reporter.make_balance_frame(
-            with_total=False, raw_values=True
-        ).cumsum()
-        balance.plot(logy=True)
-
-        plt.legend(
-            [
-                Rectangle(xy=(0, 0), width=10, height=10, color=(0.9, 0.9, 0.7))
-                for l in balance.columns
-            ],
-            [reporter.asset_names.get(c, c) for c in balance.columns],
-            bbox_to_anchor=(1, 1),
-            fontsize="small",
-        )
-        plt.suptitle(f"Asset balances until block {args.to_block}.")
-        plt.show()
+        reporter.plot_balance()
+        mpl.pyplot.show()
     print("Done.")
 
 
