@@ -668,7 +668,7 @@ class AccountPandasDumper:
             key=lambda i: [self.asset_names.get(x, x) for x in i],
         )
         font_properties = FontProperties(size="small")
-        fig = pyplot.figure()
+        fig = pyplot.figure(constrained_layout=True)
         plot_ax=fig.add_subplot(1,2,1)
         legend_ax=fig.add_subplot(1,2,2)
 
@@ -696,9 +696,9 @@ class AccountPandasDumper:
             prop=font_properties,
             handleheight=legend_font_scale,
             handlelength=legend_font_scale,
-            ncols=max(len(plot.get_lines())/assets_per_column,1),
-            frameon=False
+            ncols=int((len(plot.get_lines())+assets_per_column)/assets_per_column),
+            frameon=False,
+            loc="center right"
 
         ).get_texts():
             text.set(y=text.get_window_extent().y0 + legend_font_scale * text_bbox.height / 2)
-        pyplot.tight_layout()
