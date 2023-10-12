@@ -624,8 +624,7 @@ class AccountPandasDumper:
             )
 
     class _ImageHandler(HandlerBase):
-        def __init__(self, size, color, data: Any) -> None:
-            self.size=size
+        def __init__(self, color, data: Any) -> None:
             self.image = mpl.image.imread(data) if data is not None else None
             self.color=color
             super().__init__()
@@ -641,7 +640,8 @@ class AccountPandasDumper:
             fontsize,
             trans,
         ):
-            rectangle = Rectangle(xy=(0, 0), width=self.size, height=self.size, color=self.color)
+            rectangle = Rectangle(xy=(xdescent, ydescent),
+                                  width=width, height=height, color=self.color)
             if self.image is not None:
                 image = BboxImage(
                     TransformedBbox(
@@ -669,9 +669,8 @@ class AccountPandasDumper:
         )
         font_properties = FontProperties(size="small")
         fig = pyplot.figure()
-        plot_ax=pyplot.subplot2grid(shape=(1,3),loc=(0,0),colspan=2, fig=fig)
-
-        legend_ax=pyplot.subplot2grid(shape=(1,3),loc=(0,2),colspan=1, fig=fig)
+        plot_ax=fig.add_subplot(1,2,1)
+        legend_ax=fig.add_subplot(1,2,2)
 
         plot=balance.plot(
             ax=plot_ax,
@@ -683,24 +682,23 @@ class AccountPandasDumper:
         text_bbox=text.get_window_extent()
         text.remove()
         self._make_logos_vector()
-        LEGEND_FONT_SCALE=2
-        ASSETS_PER_COLUMN=16
+        legend_font_scale=2
+        assets_per_column=24
         legend_ax.axis("off")
         for text in legend_ax.legend(
             plot.get_lines(),
             [self.asset_names.get(c, c) for c in balance.columns],
             handler_map={
-                plot.get_lines()[i]: self._ImageHandler(size=LEGEND_FONT_SCALE*text_bbox.width,color=f"C{i}",data=self.logos[balance.columns[i]])
+                plot.get_lines()[i]: self._ImageHandler(color=f"C{i}",data=self.logos[balance.columns[i]])
                 for i in range(len(balance.columns))
             },
             labelcolor="linecolor",
             prop=font_properties,
-            handleheight=LEGEND_FONT_SCALE,
-            handlelength=LEGEND_FONT_SCALE,
-            labelspacing=LEGEND_FONT_SCALE+.1,
-            ncols=max(len(plot.get_lines())/ASSETS_PER_COLUMN,1),
+            handleheight=legend_font_scale,
+            handlelength=legend_font_scale,
+            ncols=max(len(plot.get_lines())/assets_per_column,1),
             frameon=False
 
         ).get_texts():
-            text.set(y=text.get_window_extent().y0 + LEGEND_FONT_SCALE * text_bbox.height / 2)
-        fig.subplots_adjust()
+            text.set(y=text.get_window_extent().y0 + legend_font_scale * text_bbox.height / 2)
+        pyplot.tight_layout()
