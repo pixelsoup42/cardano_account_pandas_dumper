@@ -20,6 +20,10 @@ from typing import (
 
 import blockfrost.utils
 import matplotlib as mpl
+from matplotlib.image import BboxImage
+from matplotlib.legend_handler import HandlerBase
+from matplotlib.patches import Rectangle
+from matplotlib.transforms import TransformedBbox
 import numpy as np
 import pandas as pd
 from blockfrost import BlockFrostApi
@@ -164,6 +168,7 @@ class AccountPandasDumper:
         self.truncate_length = truncate_length
         self.unmute = unmute
         self.detail_level = detail_level
+        self.logos = None  # Created lazily on plot
         self.address_names = pd.Series(
             {a: " wallet" for a in self.data.own_addresses}
             | known_dict.get("addresses", {})
@@ -595,6 +600,26 @@ class AccountPandasDumper:
         joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
         return joined_frame
 
+    def _make_logos_vector(self):
+        if self.logos is None:
+            self.logos = pd.Series(
+                {
+                    a.asset: BytesIO(b64decode(a.metadata.logo))
+                    if (
+                        hasattr(a, "metadata")
+                        and hasattr(a.metadata, "logo")
+                        and a.metadata.logo
+                    )
+                    else None
+                    for a in self.data.assets
+                }
+                | {
+                    self.ADA_ASSET: os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
+                    )
+                }
+            )
+
     def plot_balance(self):
         balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
         balance.sort_index(
@@ -606,33 +631,55 @@ class AccountPandasDumper:
         )
 
         balance.plot(
-            logy=True, title=f"Asset balances until block {self.data.to_block}."
+            logy=True,
+            title=f"Asset balances in wallet until block {self.data.to_block}.",
         )
-        assets = [self.data.assets.get(c, None) for c in balance.columns]
-        logos = [
-            BytesIO(b64decode(a.metadata.logo))
-            if (
-                a
-                and hasattr(a, "metadata")
-                and hasattr(a.metadata, "logo")
-                and a.metadata.logo
-            )
-            else (
-                os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
-                )
-                if a is None  # ADA
-                else None
-            )
-            for a in assets
-        ]
+        self._make_logos_vector()
 
+        class _ImageHandler(HandlerBase):
+            def __init__(self, data: Any) -> None:
+                self.image = mpl.image.imread(data) if data is not None else None
+                super().__init__(10, 10)
+
+            def create_artists(
+                self,
+                legend,
+                orig_handle,
+                xdescent,
+                ydescent,
+                width,
+                height,
+                fontsize,
+                trans,
+            ):
+                if self.image is not None:
+                    image = BboxImage(
+                        TransformedBbox(
+                            orig_handle.get_bbox().expanded(0.7, 0.7), transform=trans
+                        ),
+                        interpolation="antialiased",
+                        resample=True,
+                    )
+                    image.set_data(self.image)
+
+                    self.update_prop(image, orig_handle, legend)
+
+                    return [orig_handle, image]
+                else:
+                    return [orig_handle]
+
+        legends = [
+            Rectangle(xy=(0, 0), width=10, height=10, color=f"C{i}")
+            for i in range(len(balance.columns))
+        ]
         mpl.pyplot.legend(
-            [
-                mpl.patches.Rectangle(xy=(0, 0), width=10, height=10, color=f"C{i}")
-                for i in range(len(balance.columns))
-            ],
+            legends,
             [self.asset_names.get(c, c) for c in balance.columns],
+            handler_map={
+                legends[i]: _ImageHandler(self.logos[balance.columns[i]])
+                for i in range(len(balance.columns))
+            },
             bbox_to_anchor=(1, 1),
-            fontsize="small",
+            labelcolor="linecolor",
+            shadow=True,
         )
