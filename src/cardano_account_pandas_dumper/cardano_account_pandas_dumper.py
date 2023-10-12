@@ -20,6 +20,9 @@ from typing import (
 
 import blockfrost.utils
 import matplotlib as mpl
+import matplotlib.pyplot as pyplot
+
+from matplotlib.font_manager import FontProperties
 from matplotlib.image import BboxImage
 from matplotlib.legend_handler import HandlerBase
 from matplotlib.patches import Rectangle
@@ -620,6 +623,41 @@ class AccountPandasDumper:
                 }
             )
 
+    class _ImageHandler(HandlerBase):
+        def __init__(self, size, color, data: Any) -> None:
+            self.size=size
+            self.image = mpl.image.imread(data) if data is not None else None
+            self.color=color
+            super().__init__()
+
+        def create_artists(
+            self,
+            legend,
+            orig_handle,
+            xdescent,
+            ydescent,
+            width,
+            height,
+            fontsize,
+            trans,
+        ):
+            rectangle = Rectangle(xy=(0, 0), width=self.size, height=self.size, color=self.color)
+            if self.image is not None:
+                image = BboxImage(
+                    TransformedBbox(
+                        rectangle.get_bbox().expanded(0.7, 0.7), transform=trans
+                    ),
+                    interpolation="antialiased",
+                    resample=True,
+                )
+                image.set_data(self.image)
+
+                self.update_prop(image, orig_handle, legend)
+
+                return [rectangle, image]
+            else:
+                return [rectangle]
+
     def plot_balance(self):
         balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
         balance.sort_index(
@@ -629,57 +667,40 @@ class AccountPandasDumper:
             inplace=True,
             key=lambda i: [self.asset_names.get(x, x) for x in i],
         )
+        font_properties = FontProperties(size="small")
+        fig = pyplot.figure()
+        plot_ax=pyplot.subplot2grid(shape=(1,3),loc=(0,0),colspan=2, fig=fig)
 
-        balance.plot(
+        legend_ax=pyplot.subplot2grid(shape=(1,3),loc=(0,2),colspan=1, fig=fig)
+
+        plot=balance.plot(
+            ax=plot_ax,
             logy=True,
             title=f"Asset balances in wallet until block {self.data.to_block}.",
+            legend=False,
         )
+        text=pyplot.text(x=0,y=0,s="M", font_properties=font_properties)
+        text_bbox=text.get_window_extent()
+        text.remove()
         self._make_logos_vector()
-
-        class _ImageHandler(HandlerBase):
-            def __init__(self, data: Any) -> None:
-                self.image = mpl.image.imread(data) if data is not None else None
-                super().__init__(10, 10)
-
-            def create_artists(
-                self,
-                legend,
-                orig_handle,
-                xdescent,
-                ydescent,
-                width,
-                height,
-                fontsize,
-                trans,
-            ):
-                if self.image is not None:
-                    image = BboxImage(
-                        TransformedBbox(
-                            orig_handle.get_bbox().expanded(0.7, 0.7), transform=trans
-                        ),
-                        interpolation="antialiased",
-                        resample=True,
-                    )
-                    image.set_data(self.image)
-
-                    self.update_prop(image, orig_handle, legend)
-
-                    return [orig_handle, image]
-                else:
-                    return [orig_handle]
-
-        legends = [
-            Rectangle(xy=(0, 0), width=10, height=10, color=f"C{i}")
-            for i in range(len(balance.columns))
-        ]
-        mpl.pyplot.legend(
-            legends,
+        LEGEND_FONT_SCALE=2
+        ASSETS_PER_COLUMN=16
+        legend_ax.axis("off")
+        for text in legend_ax.legend(
+            plot.get_lines(),
             [self.asset_names.get(c, c) for c in balance.columns],
             handler_map={
-                legends[i]: _ImageHandler(self.logos[balance.columns[i]])
+                plot.get_lines()[i]: self._ImageHandler(size=LEGEND_FONT_SCALE*text_bbox.width,color=f"C{i}",data=self.logos[balance.columns[i]])
                 for i in range(len(balance.columns))
             },
-            bbox_to_anchor=(1, 1),
             labelcolor="linecolor",
-            shadow=True,
-        )
+            prop=font_properties,
+            handleheight=LEGEND_FONT_SCALE,
+            handlelength=LEGEND_FONT_SCALE,
+            labelspacing=LEGEND_FONT_SCALE+.1,
+            ncols=max(len(plot.get_lines())/ASSETS_PER_COLUMN,1),
+            frameon=False
+
+        ).get_texts():
+            text.set(y=text.get_window_extent().y0 + LEGEND_FONT_SCALE * text_bbox.height / 2)
+        fig.subplots_adjust()
