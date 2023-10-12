@@ -6,7 +6,7 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
-import matplotlib as mpl
+import matplotlib.pyplot as plt
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
@@ -67,9 +67,9 @@ def _create_arg_parser():
         type=argparse.FileType("wb"),
     )
     result.add_argument(
-        "--plot",
-        help="Draw a plot of balance over time.",
-        action="store_true",
+        "--svg_output",
+        help="Path to SVG output file.",
+        type=argparse.FileType("wb"),
     )
     result.add_argument(
         "--detail_level",
@@ -121,11 +121,11 @@ def main():
             message="Following addresses do not look like valid staking addresses: "
             + " ".join(invalid_staking_addresses),
         )
-    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output, args.plot]):
+    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output, args.svg_output]):
         parser.exit(
             status=1,
             message="No output specified, neeed at least one of --checkpoint_output,"
-            + " --csv_output, --xlsx_output, --plot.\n",
+            + " --csv_output, --xlsx_output, --svg_output.\n",
         )
     known_dict_from_file = jstyleson.load(args.known_file) if args.known_file else {}
     staking_addresses_set = frozenset(args.staking_address)
@@ -227,9 +227,12 @@ def main():
             )
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
-    if args.plot:
+    if args.svg_output:
         reporter.plot_balance()
-        mpl.pyplot.show()
+        try:
+            plt.savefig(args.svg_output,format='svg')
+        except OSError as exception:
+            warnings.warn(f"Failed to write .svg file: {exception}")            
     print("Done.")
 
 
