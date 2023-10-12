@@ -119,12 +119,11 @@ transaction message
 columns 3-...:
 transaction input (positive) or output (negative) for each asset and address.
 
-row 0: asset policy
-row 1: asset name
-row 2: address
+row 0: asset name
+row 1: address
 
-If the `--raw_values` flag is passed, row 3 is inserted, with a value of `own`for own addresses (belonging to the specified staking addresses)
-and `other` for other addresses (if `--raw_values`is not passed, this information is on row 2).
+If the `--raw_values` flag is passed, row 2 is inserted, with a value of `own`for own addresses (belonging to the specified staking addresses)
+and `other` for other addresses.
 Addresses belonging to one of the specified staking addresses are labeled as `own`.
 With `--detail_level=2`, known addresses are listed with their name, other addresses are labeled as `other`.
 
@@ -155,28 +154,3 @@ or purchasing one of our cool [PixelSoup NFTs](https://www.jpg.store/PixelSoup?t
 Donations and NFT purchases are both really appreciated, the advantage of an NFT purchase is that there is a nonzero probability of financial upside.
 
 If you think this tool can be useful to others, please retweet [the announcement](https://twitter.com/PixelSoup42/status/1697305462721396957)
-
-## Comparison with [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter)
-
-After finishing this tool, I was made aware that another comparable project existed: [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter)
-
-Here is a comparison table for both projects (please submit corrections if you think anything is wrong):
-
-| Feature | [cardano_account_pandas_dumper](https://github.com/pixelsoup42/cardano_account_pandas_dumper) | [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter) |
-| ------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------|
-| CSV output |✔️|✔️|
-| .xlsx output |✔️|✔️|
-| coingecko integration for fiat price |❌|✔️[^1]|
-| Knows about assets other than ADA |✔️|❌|
-| Knows about DeFI contract addresses |✔️[^2]|❌|
-| Extracts useful information from tx metadata |✔️|❌|
-| Ready to use after one-liner install command |✔️|❌|
-| Code is [Mypy](https://mypy-lang.org/) clean |✔️|❌|
-| Lines of Python code in repo (2023-09-01)| 529 | 1011|
-| Has a cool logo 😉 |✔️|❌|
-
-<!-- markdownlint-disable MD053 -->
-
-[^1]: Could not get this to work
-
-[^2]: With `--detail_level=2`
