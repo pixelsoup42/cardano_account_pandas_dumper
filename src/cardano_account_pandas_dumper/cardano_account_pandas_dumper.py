@@ -623,7 +623,7 @@ class AccountPandasDumper:
                 }
             )
 
-    class _ImageHandler(HandlerBase):
+    class _ImageLegendHandler(HandlerBase):
         def __init__(self, color, data: Any) -> None:
             self.image = mpl.image.imread(data) if data is not None else None
             self.color=color
@@ -668,9 +668,9 @@ class AccountPandasDumper:
             key=lambda i: [self.asset_names.get(x, x) for x in i],
         )
         font_properties = FontProperties(size="small")
-        fig = pyplot.figure(constrained_layout=True)
-        plot_ax=fig.add_subplot(1,2,1)
-        legend_ax=fig.add_subplot(1,2,2)
+        fig = pyplot.figure(constrained_layout=True,figsize=(20,14))
+        plot_ax=pyplot.subplot2grid(fig=fig,shape=(1,8),loc=(0,0),colspan=7)
+        legend_ax=pyplot.subplot2grid(fig=fig,shape=(1,8),loc=(0,7),colspan=1)
 
         plot=balance.plot(
             ax=plot_ax,
@@ -683,20 +683,18 @@ class AccountPandasDumper:
         text.remove()
         self._make_logos_vector()
         legend_font_scale=2
-        assets_per_column=24
         legend_ax.axis("off")
         for text in legend_ax.legend(
             plot.get_lines(),
             [self.asset_names.get(c, c) for c in balance.columns],
             handler_map={
-                plot.get_lines()[i]: self._ImageHandler(color=f"C{i}",data=self.logos[balance.columns[i]])
+                plot.get_lines()[i]: self._ImageLegendHandler(color=f"C{i}",data=self.logos[balance.columns[i]])
                 for i in range(len(balance.columns))
             },
             labelcolor="linecolor",
             prop=font_properties,
             handleheight=legend_font_scale,
             handlelength=legend_font_scale,
-            ncols=int((len(plot.get_lines())+assets_per_column)/assets_per_column),
             frameon=False,
             loc="center right"
 
