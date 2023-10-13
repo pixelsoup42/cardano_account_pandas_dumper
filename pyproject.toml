@@ -14,6 +14,7 @@ keywords = [
     "report",
     "transaction",
     "wallet",
+    "graph",
 ]
 dependencies = [
     "blockfrost-python",
@@ -22,7 +23,6 @@ dependencies = [
     "openpyxl",
     "pandas",
     "types-openpyxl",
-    "types-Pillow",
 ]
 
 [project.scripts]
