@@ -231,7 +231,9 @@ def main():
     if args.graph_output:
         reporter.plot_balance()
         try:
-            plt.savefig(args.graph_output,metadata=reporter.get_graph_metadata(args.graph_output),pad_inches=0.5)
+            plt.savefig(args.graph_output,
+                        metadata=reporter.get_graph_metadata(args.graph_output),
+                        pad_inches=0.5)
         except OSError as exception:
             warnings.warn(f"Failed to write graph file: {exception}")
     print("Done.")
