@@ -14,6 +14,7 @@ from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
 # Error codes due to project key rate limiting or capping
 PROJECT_KEY_ERROR_CODES = frozenset([402, 403, 418, 429])
 
+CREATOR_STRING="https://github.com/pixelsoup42/cardano_account_pandas_dumper"
 
 def _create_arg_parser():
     result = argparse.ArgumentParser(
@@ -67,9 +68,10 @@ def _create_arg_parser():
         type=argparse.FileType("wb"),
     )
     result.add_argument(
-        "--svg_output",
-        help="Path to SVG output file.",
-        type=argparse.FileType("wb"),
+        "--graph_output",
+        help="Path to graphics output file.",
+        type=str,
+
     )
     result.add_argument(
         "--detail_level",
@@ -121,11 +123,11 @@ def main():
             message="Following addresses do not look like valid staking addresses: "
             + " ".join(invalid_staking_addresses),
         )
-    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output, args.svg_output]):
+    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output, args.graph_output]):
         parser.exit(
             status=1,
             message="No output specified, neeed at least one of --checkpoint_output,"
-            + " --csv_output, --xlsx_output, --svg_output.\n",
+            + " --csv_output, --xlsx_output, --graph_output.\n",
         )
     known_dict_from_file = jstyleson.load(args.known_file) if args.known_file else {}
     staking_addresses_set = frozenset(args.staking_address)
@@ -227,12 +229,13 @@ def main():
             )
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
-    if args.svg_output:
+    if args.graph_output:
         reporter.plot_balance()
         try:
-            plt.savefig(args.svg_output,format='svg')
+            plt.savefig(args.graph_output,
+                        metadata={"Creator":CREATOR_STRING,"Software":CREATOR_STRING})
         except OSError as exception:
-            warnings.warn(f"Failed to write .svg file: {exception}")            
+            warnings.warn(f"Failed to write graph file: {exception}")
     print("Done.")
 
 
