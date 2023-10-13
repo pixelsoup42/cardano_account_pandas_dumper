@@ -80,12 +80,6 @@ def _create_arg_parser():
         default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "matplotlib.rc"),
     )
     result.add_argument(
-        "--log_scale",
-        help="Use log scale on graph, default=automatic.",
-        type=bool,
-        default=None,
-    )
-    result.add_argument(
         "--detail_level",
         help="Level of detail of report (1=only own addresses, 2=other addresses as well).",
         default=1,
@@ -244,7 +238,7 @@ def main():
     if args.graph_output:
         with mpl.rc_context(fname=args.matplotlib_rc):
             try:
-                reporter.plot_balance(log_scale=args.log_scale)
+                reporter.plot_balance()
                 plt.savefig(args.graph_output,
                             metadata=reporter.get_graph_metadata(args.graph_output))
             except OSError as exception:

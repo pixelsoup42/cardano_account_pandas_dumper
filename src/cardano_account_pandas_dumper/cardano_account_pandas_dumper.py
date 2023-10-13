@@ -1,37 +1,17 @@
 """ Cardano Account To Pandas Dumper."""
 import datetime
 import itertools
-from base64 import b64decode
-from collections import defaultdict
-from io import BytesIO
 import os
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    FrozenSet,
-    List,
-    Mapping,
-    MutableMapping,
-    Optional,
-    Set,
-    Tuple,
-    cast,
-)
+from collections import defaultdict
+from typing import (Any, Callable, Dict, FrozenSet, List, Mapping,
+                    MutableMapping, Optional, Set, Tuple, cast)
 
 import blockfrost.utils
 import matplotlib as mpl
-import matplotlib.pyplot as pyplot
-
-from matplotlib.font_manager import FontProperties
-from matplotlib.image import BboxImage
-from matplotlib.legend_handler import HandlerBase
-from matplotlib.patches import Rectangle
-from matplotlib.transforms import TransformedBbox
+from matplotlib import pyplot
 import numpy as np
 import pandas as pd
 from blockfrost import BlockFrostApi
-
 
 
 
@@ -166,8 +146,6 @@ class AccountPandasDumper:
 
     # Constants for graph output
     CREATOR_STRING="https://github.com/pixelsoup42/cardano_account_pandas_dumper"
-    # Switch to log scale if difference between min and max is more than this order of magnitude
-    AUTO_LOG_SCALE_THRESHOLD=8
 
     def __init__(
         self,
@@ -612,113 +590,16 @@ class AccountPandasDumper:
         joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
         return joined_frame
 
-    class _ImageLegendHandler(HandlerBase):
-        def __init__(self, color, asset_id: str,
-                     asset_obj: Optional[blockfrost.utils.Namespace]) -> None:
-            self.asset_id=asset_id
-            self.asset_obj=asset_obj
-            self.color=color
-            super().__init__()
-
-        def create_artists(
-            self,
-            legend,
-            orig_handle,
-            xdescent,
-            ydescent,
-            width,
-            height,
-            fontsize,
-            trans,
-        ):
-            rectangle = Rectangle(xy=(xdescent, ydescent),
-                                  width=width, height=height, color=self.color)
-            if self.asset_id == AccountPandasDumper.ADA_ASSET:
-                image_data=os.path.join(os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp")
-            elif (self.asset_obj is not None
-                  and hasattr(self.asset_obj , "metadata")
-                  and hasattr(self.asset_obj.metadata, "logo")
-                    and self.asset_obj.metadata.logo):
-                image_data= BytesIO(b64decode(self.asset_obj.metadata.logo))
-            else:
-                image_data = None
-            if image_data is not None:
-                image = BboxImage(
-                    TransformedBbox(
-                        rectangle.get_bbox().expanded(0.7, 0.7), transform=trans
-                    ),
-                )
-                image.set_data(mpl.image.imread(image_data))
-
-                self.update_prop(image, orig_handle, legend)
-
-                return [rectangle, image]
-            else:
-                return [rectangle]
-
     def _plot_title(self):
         return f"Asset balances in wallet until block {self.data.to_block}."
 
-    def _auto_log_scale(self,balance : pd.DataFrame) -> bool:
-        # Ignore values that are lower than asset precision or NA when calculating min
-        min_mask = pd.concat(
-            [
-                balance[c]
-                .abs()
-                .ge(
-                    np.float_power(
-                        10,
-                        np.negative(self.asset_decimals[c]),
-                    )
-                )
-                for c in balance.columns
-            ],
-            axis=1,
-        ) & balance.notna()
-   
-        balance_min=balance.where(min_mask,np.infty).abs().min(skipna=True,numeric_only=True).min()
-        balance_max=balance.abs().max(skipna=True,numeric_only=True).max()
-        return bool((np.log10(balance_max) - np.log10(balance_min)) > self.AUTO_LOG_SCALE_THRESHOLD)
-
-    def plot_balance(self, log_scale: Optional[bool]):
+    def plot_balance(self):
         """ Create a Matplotlib plot with the asset balance over time."""
-        balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
-        balance.sort_index(
-            axis=1,
-            level=0,
-            sort_remaining=True,
-            inplace=True,
-            key=lambda i: [self.asset_names.get(x, x) for x in i],
-        )
-        font_properties = FontProperties(size=mpl.rcParams['legend.fontsize'])
-        plot_ax=pyplot.subplot2grid(shape=(1,7),loc=(0,0),colspan=6)
-        legend_ax=pyplot.subplot2grid(shape=(1,7),loc=(0,6),colspan=1)
-
-        plot=balance.plot(
-            ax=plot_ax,
-            logy=log_scale if log_scale is not None else self._auto_log_scale(balance),
+        balance = self.make_balance_frame(with_total=False,raw_values=False).cumsum()
+        balance.plot(
             title=self._plot_title(),
-            legend=False,
+            subplots=True
         )
-        # Get font size
-        text=pyplot.text(x=0,y=0,s="M", font_properties=font_properties)
-        text_bbox=text.get_window_extent()
-        text.remove()
-        legend_ax.axis("off")
-        for text in legend_ax.legend(
-            plot.get_lines(),
-            cast(List[str],[self.asset_names.get(c, c) for c in balance.columns]),
-            handler_map={
-                plot.get_lines()[i]:
-                self._ImageLegendHandler(color=f"C{i}",
-                                         asset_id=balance.columns[i],
-                                         asset_obj=self.data.assets.get(balance.columns[i],None))
-                for i in range(len(balance.columns))
-            },
-
-        ).get_texts():
-            text.set(y=text.get_window_extent().y0 +
-                     mpl.rcParams['legend.handleheight'] * text_bbox.height / 2)
 
     def get_graph_metadata(self, filename:str) -> Mapping :
         """Return graph metadata depending on file extension."""

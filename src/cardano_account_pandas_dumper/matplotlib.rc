@@ -2,12 +2,12 @@ axes.formatter.limits: -10, 12
 axes.grid: True
 axes.grid.which: both
 axes.titleweight: bold
-figure.autolayout: True
-figure.figsize: 20,14
+figure.constrained_layout.use: True
+figure.figsize: 20,40
 legend.fontsize:medium
 legend.frameon:False
 legend.handleheight:2
 legend.handlelength:2
 legend.labelcolor:linecolor
-legend.loc:center
+legend.loc:upper left
 savefig.pad_inches:0.5
