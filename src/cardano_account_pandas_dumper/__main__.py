@@ -6,6 +6,7 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from blockfrost import ApiError, BlockFrostApi
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -71,6 +72,12 @@ def _create_arg_parser():
         help="Path to graphics output file.",
         type=str,
 
+    )
+    result.add_argument(
+        "--matplotlib_rc",
+        help="Path to matplotlib defaults file.",
+        type=str,
+        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "matplotlib.rc"),
     )
     result.add_argument(
         "--detail_level",
@@ -229,13 +236,13 @@ def main():
         except OSError as exception:
             warnings.warn(f"Failed to write .xlsx file: {exception}")
     if args.graph_output:
-        reporter.plot_balance()
-        try:
-            plt.savefig(args.graph_output,
-                        metadata=reporter.get_graph_metadata(args.graph_output),
-                        pad_inches=0.5)
-        except OSError as exception:
-            warnings.warn(f"Failed to write graph file: {exception}")
+        with mpl.rc_context(fname=args.matplotlib_rc):
+            try:
+                reporter.plot_balance()
+                plt.savefig(args.graph_output,
+                            metadata=reporter.get_graph_metadata(args.graph_output))
+            except OSError as exception:
+                warnings.warn(f"Failed to write graph file: {exception}")
     print("Done.")
 
 

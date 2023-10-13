@@ -665,10 +665,9 @@ class AccountPandasDumper:
             inplace=True,
             key=lambda i: [self.asset_names.get(x, x) for x in i],
         )
-        font_properties = FontProperties(size="medium")
-        fig = pyplot.figure(constrained_layout=True,figsize=(20,14))
-        plot_ax=pyplot.subplot2grid(fig=fig,shape=(1,7),loc=(0,0),colspan=6)
-        legend_ax=pyplot.subplot2grid(fig=fig,shape=(1,7),loc=(0,6),colspan=1)
+        font_properties = FontProperties(size=mpl.rcParams['legend.fontsize'])
+        plot_ax=pyplot.subplot2grid(shape=(1,7),loc=(0,0),colspan=6)
+        legend_ax=pyplot.subplot2grid(shape=(1,7),loc=(0,6),colspan=1)
 
         plot=balance.plot(
             ax=plot_ax,
@@ -680,7 +679,6 @@ class AccountPandasDumper:
         text=pyplot.text(x=0,y=0,s="M", font_properties=font_properties)
         text_bbox=text.get_window_extent()
         text.remove()
-        legend_font_scale=2
         legend_ax.axis("off")
         for text in legend_ax.legend(
             plot.get_lines(),
@@ -692,16 +690,9 @@ class AccountPandasDumper:
                                          asset_obj=self.data.assets.get(balance.columns[i],None))
                 for i in range(len(balance.columns))
             },
-            labelcolor="linecolor",
-            prop=font_properties,
-            handleheight=legend_font_scale,
-            handlelength=legend_font_scale,
-            frameon=False,
-            loc="center right"
 
         ).get_texts():
-            text.set(y=text.get_window_extent().y0 + legend_font_scale * text_bbox.height / 2)
-        pyplot.tight_layout()
+            text.set(y=text.get_window_extent().y0 + mpl.rcParams['legend.handleheight'] * text_bbox.height / 2)
 
     def get_graph_metadata(self, filename:str) -> Mapping :
         """Return graph metadata depending on file extension."""

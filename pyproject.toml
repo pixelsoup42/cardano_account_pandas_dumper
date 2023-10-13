@@ -32,7 +32,7 @@ cardano_account_pandas_dumper = "cardano_account_pandas_dumper.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cardano_account_pandas_dumper = ["*.jsonc", "*.webp"]
+cardano_account_pandas_dumper = ["*.jsonc", "*.webp", "*.rc"]
 
 [tool.mypy]
 follow_imports = "normal"
