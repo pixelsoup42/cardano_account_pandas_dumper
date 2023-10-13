@@ -11,6 +11,7 @@ from typing import (
     Dict,
     FrozenSet,
     List,
+    Mapping,
     MutableMapping,
     Optional,
     Set,
@@ -30,6 +31,9 @@ from matplotlib.transforms import TransformedBbox
 import numpy as np
 import pandas as pd
 from blockfrost import BlockFrostApi
+
+CREATOR_STRING="https://github.com/pixelsoup42/cardano_account_pandas_dumper"
+
 
 
 class AccountData:
@@ -624,6 +628,7 @@ class AccountPandasDumper:
             )
 
     class _ImageLegendHandler(HandlerBase):
+        # TODO: pass asset instead of data, move code above to here, move outside class
         def __init__(self, color, data: Any) -> None:
             self.image = mpl.image.imread(data) if data is not None else None
             self.color=color
@@ -658,7 +663,11 @@ class AccountPandasDumper:
             else:
                 return [rectangle]
 
+    def _plot_title(self):
+        return f"Asset balances in wallet until block {self.data.to_block}."
+
     def plot_balance(self):
+        """ Create a Matplotlib plot with the asset balance over time."""
         balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
         balance.sort_index(
             axis=1,
@@ -675,12 +684,14 @@ class AccountPandasDumper:
         plot=balance.plot(
             ax=plot_ax,
             logy=True,
-            title=f"Asset balances in wallet until block {self.data.to_block}.",
+            title=self._plot_title(),
             legend=False,
         )
+        # Get font size
         text=pyplot.text(x=0,y=0,s="M", font_properties=font_properties)
         text_bbox=text.get_window_extent()
         text.remove()
+
         self._make_logos_vector()
         legend_font_scale=2
         legend_ax.axis("off")
@@ -688,7 +699,8 @@ class AccountPandasDumper:
             plot.get_lines(),
             [self.asset_names.get(c, c) for c in balance.columns],
             handler_map={
-                plot.get_lines()[i]: self._ImageLegendHandler(color=f"C{i}",data=self.logos[balance.columns[i]])
+                plot.get_lines()[i]:
+                self._ImageLegendHandler(color=f"C{i}",data=self.logos[balance.columns[i]])
                 for i in range(len(balance.columns))
             },
             labelcolor="linecolor",
@@ -700,3 +712,16 @@ class AccountPandasDumper:
 
         ).get_texts():
             text.set(y=text.get_window_extent().y0 + legend_font_scale * text_bbox.height / 2)
+        pyplot.tight_layout()
+
+    def get_graph_metadata(self, filename:str) -> Mapping :
+        """Return graph metadata depending on file extension."""
+        extension=os.path.splitext(filename)[1]
+        if extension in (".svg",".pdf"):
+            return { "Creator": CREATOR_STRING, "Title": self._plot_title() }
+        elif extension==".png":
+            return {"Software" : CREATOR_STRING,"Title": self._plot_title()}
+        elif extension in (".ps",".eps"):
+            return { "Creator": CREATOR_STRING }
+        else:
+            return {}
