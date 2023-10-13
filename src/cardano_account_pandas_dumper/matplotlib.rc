@@ -1,9 +1,13 @@
-savefig.pad_inches:0.5
-legend.fontsize:medium
-legend.labelcolor:linecolor
-legend.handleheight:2
-legend.handlelength:2
-legend.frameon:False
-legend.loc:center
+axes.formatter.limits: -10, 12
+axes.grid: True
+axes.grid.which: both
+axes.titleweight: bold
 figure.autolayout: True
 figure.figsize: 20,14
+legend.fontsize:medium
+legend.frameon:False
+legend.handleheight:2
+legend.handlelength:2
+legend.labelcolor:linecolor
+legend.loc:center
+savefig.pad_inches:0.5

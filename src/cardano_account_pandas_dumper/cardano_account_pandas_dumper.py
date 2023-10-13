@@ -647,8 +647,6 @@ class AccountPandasDumper:
                     TransformedBbox(
                         rectangle.get_bbox().expanded(0.7, 0.7), transform=trans
                     ),
-                    interpolation="antialiased",
-                    resample=True,
                 )
                 image.set_data(mpl.image.imread(image_data))
 
