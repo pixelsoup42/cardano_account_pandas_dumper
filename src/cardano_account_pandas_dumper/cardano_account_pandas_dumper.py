@@ -665,10 +665,10 @@ class AccountPandasDumper:
             inplace=True,
             key=lambda i: [self.asset_names.get(x, x) for x in i],
         )
-        font_properties = FontProperties(size="small")
+        font_properties = FontProperties(size="medium")
         fig = pyplot.figure(constrained_layout=True,figsize=(20,14))
-        plot_ax=pyplot.subplot2grid(fig=fig,shape=(1,8),loc=(0,0),colspan=7)
-        legend_ax=pyplot.subplot2grid(fig=fig,shape=(1,8),loc=(0,7),colspan=1)
+        plot_ax=pyplot.subplot2grid(fig=fig,shape=(1,7),loc=(0,0),colspan=6)
+        legend_ax=pyplot.subplot2grid(fig=fig,shape=(1,7),loc=(0,6),colspan=1)
 
         plot=balance.plot(
             ax=plot_ax,
