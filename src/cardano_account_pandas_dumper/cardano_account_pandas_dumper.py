@@ -175,7 +175,6 @@ class AccountPandasDumper:
         self.truncate_length = truncate_length
         self.unmute = unmute
         self.detail_level = detail_level
-        self.logos = None  # Created lazily on plot
         self.address_names = pd.Series(
             {a: " wallet" for a in self.data.own_addresses}
             | known_dict.get("addresses", {})
@@ -607,30 +606,11 @@ class AccountPandasDumper:
         joined_frame = pd.concat(objs=[msg_frame, balance_frame], axis=1)
         return joined_frame
 
-    def _make_logos_vector(self):
-        if self.logos is None:
-            self.logos = pd.Series(
-                {
-                    a.asset: BytesIO(b64decode(a.metadata.logo))
-                    if (
-                        hasattr(a, "metadata")
-                        and hasattr(a.metadata, "logo")
-                        and a.metadata.logo
-                    )
-                    else None
-                    for a in self.data.assets
-                }
-                | {
-                    self.ADA_ASSET: os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
-                    )
-                }
-            )
-
     class _ImageLegendHandler(HandlerBase):
-        # TODO: pass asset instead of data, move code above to here, move outside class
-        def __init__(self, color, data: Any) -> None:
-            self.image = mpl.image.imread(data) if data is not None else None
+        def __init__(self, color, asset_id: str,
+                     asset_obj: Optional[blockfrost.utils.Namespace]) -> None:
+            self.asset_id=asset_id
+            self.asset_obj=asset_obj
             self.color=color
             super().__init__()
 
@@ -647,7 +627,16 @@ class AccountPandasDumper:
         ):
             rectangle = Rectangle(xy=(xdescent, ydescent),
                                   width=width, height=height, color=self.color)
-            if self.image is not None:
+            if self.asset_id == AccountPandasDumper.ADA_ASSET:
+                image_data=os.path.join(os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp")
+            elif (self.asset_obj is not None
+                  and hasattr(self.asset_obj , "metadata")
+                  and hasattr(self.asset_obj.metadata, "logo")
+                    and self.asset_obj.metadata.logo):
+                image_data= BytesIO(b64decode(self.asset_obj.metadata.logo))
+            else:
+                image_data = None
+            if image_data is not None:
                 image = BboxImage(
                     TransformedBbox(
                         rectangle.get_bbox().expanded(0.7, 0.7), transform=trans
@@ -655,7 +644,7 @@ class AccountPandasDumper:
                     interpolation="antialiased",
                     resample=True,
                 )
-                image.set_data(self.image)
+                image.set_data(mpl.image.imread(image_data))
 
                 self.update_prop(image, orig_handle, legend)
 
@@ -691,8 +680,6 @@ class AccountPandasDumper:
         text=pyplot.text(x=0,y=0,s="M", font_properties=font_properties)
         text_bbox=text.get_window_extent()
         text.remove()
-
-        self._make_logos_vector()
         legend_font_scale=2
         legend_ax.axis("off")
         for text in legend_ax.legend(
@@ -700,7 +687,9 @@ class AccountPandasDumper:
             [self.asset_names.get(c, c) for c in balance.columns],
             handler_map={
                 plot.get_lines()[i]:
-                self._ImageLegendHandler(color=f"C{i}",data=self.logos[balance.columns[i]])
+                self._ImageLegendHandler(color=f"C{i}",
+                                         asset_id=balance.columns[i],
+                                         asset_obj=self.data.assets.get(balance.columns[i],None))
                 for i in range(len(balance.columns))
             },
             labelcolor="linecolor",
