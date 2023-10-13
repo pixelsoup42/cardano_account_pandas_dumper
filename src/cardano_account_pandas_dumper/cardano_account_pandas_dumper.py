@@ -32,7 +32,6 @@ import numpy as np
 import pandas as pd
 from blockfrost import BlockFrostApi
 
-CREATOR_STRING="https://github.com/pixelsoup42/cardano_account_pandas_dumper"
 
 
 
@@ -155,13 +154,20 @@ class AccountData:
 class AccountPandasDumper:
     """Hold logic to convert an instance of AccountData to a Pandas dataframe."""
 
+    # Transaction timestamp = block time + transaction index in block * TRANSACTION_OFFSET
     TRANSACTION_OFFSET = np.timedelta64(1000, "ns")
+
     OWN_LABEL = " own"
     OTHER_LABEL = "other"
     ADA_ASSET = " ADA"
     ADA_DECIMALS = 6
     METADATA_MESSAGE_LABEL = "674"
     METADATA_NFT_MINT_LABEL = "721"
+
+    # Constants for graph output
+    CREATOR_STRING="https://github.com/pixelsoup42/cardano_account_pandas_dumper"
+    # Switch to log scale if difference between min and max is more than this order of magnitude
+    AUTO_LOG_SCALE_THRESHOLD=8
 
     def __init__(
         self,
@@ -655,7 +661,28 @@ class AccountPandasDumper:
     def _plot_title(self):
         return f"Asset balances in wallet until block {self.data.to_block}."
 
-    def plot_balance(self):
+    def _auto_log_scale(self,balance : pd.DataFrame) -> bool:
+        # Ignore values that are lower than asset precision or NA when calculating min
+        min_mask = pd.concat(
+            [
+                balance[c]
+                .abs()
+                .ge(
+                    np.float_power(
+                        10,
+                        np.negative(self.asset_decimals[c]),
+                    )
+                )
+                for c in balance.columns
+            ],
+            axis=1,
+        ) & balance.notna()
+   
+        balance_min=balance.where(min_mask,np.infty).abs().min(skipna=True,numeric_only=True).min()
+        balance_max=balance.abs().max(skipna=True,numeric_only=True).max()
+        return bool((np.log10(balance_max) - np.log10(balance_min)) > self.AUTO_LOG_SCALE_THRESHOLD)
+
+    def plot_balance(self, log_scale: Optional[bool]):
         """ Create a Matplotlib plot with the asset balance over time."""
         balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
         balance.sort_index(
@@ -671,7 +698,7 @@ class AccountPandasDumper:
 
         plot=balance.plot(
             ax=plot_ax,
-            logy=True,
+            logy=log_scale if log_scale is not None else self._auto_log_scale(balance),
             title=self._plot_title(),
             legend=False,
         )
@@ -682,7 +709,7 @@ class AccountPandasDumper:
         legend_ax.axis("off")
         for text in legend_ax.legend(
             plot.get_lines(),
-            [self.asset_names.get(c, c) for c in balance.columns],
+            cast(List[str],[self.asset_names.get(c, c) for c in balance.columns]),
             handler_map={
                 plot.get_lines()[i]:
                 self._ImageLegendHandler(color=f"C{i}",
@@ -701,10 +728,10 @@ class AccountPandasDumper:
         if not save_format:
             save_format= mpl.rcParams["savefig.format"]
         if save_format in ("svg","pdf"):
-            return { "Creator": CREATOR_STRING, "Title": self._plot_title() }
+            return { "Creator": self.CREATOR_STRING, "Title": self._plot_title() }
         elif save_format=="png":
-            return {"Software" : CREATOR_STRING,"Title": self._plot_title()}
+            return {"Software" : self.CREATOR_STRING,"Title": self._plot_title()}
         elif save_format in ("ps","eps"):
-            return { "Creator": CREATOR_STRING }
+            return { "Creator": self.CREATOR_STRING }
         else:
             return {}
