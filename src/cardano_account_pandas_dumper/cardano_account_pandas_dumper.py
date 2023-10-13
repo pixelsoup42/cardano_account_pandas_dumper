@@ -692,16 +692,19 @@ class AccountPandasDumper:
             },
 
         ).get_texts():
-            text.set(y=text.get_window_extent().y0 + mpl.rcParams['legend.handleheight'] * text_bbox.height / 2)
+            text.set(y=text.get_window_extent().y0 +
+                     mpl.rcParams['legend.handleheight'] * text_bbox.height / 2)
 
     def get_graph_metadata(self, filename:str) -> Mapping :
         """Return graph metadata depending on file extension."""
-        extension=os.path.splitext(filename)[1]
-        if extension in (".svg",".pdf"):
+        save_format=os.path.splitext(filename)[1].removeprefix('.')
+        if not save_format:
+            save_format= mpl.rcParams["savefig.format"]
+        if save_format in ("svg","pdf"):
             return { "Creator": CREATOR_STRING, "Title": self._plot_title() }
-        elif extension==".png":
+        elif save_format=="png":
             return {"Software" : CREATOR_STRING,"Title": self._plot_title()}
-        elif extension in (".ps",".eps"):
+        elif save_format in ("ps","eps"):
             return { "Creator": CREATOR_STRING }
         else:
             return {}
