@@ -9,7 +9,6 @@ import jstyleson
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from blockfrost import ApiError, BlockFrostApi
-from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
 
 # Error codes due to project key rate limiting or capping
@@ -71,13 +70,14 @@ def _create_arg_parser():
         "--graph_output",
         help="Path to graphics output file.",
         type=str,
-
     )
     result.add_argument(
         "--matplotlib_rc",
         help="Path to matplotlib defaults file.",
         type=str,
-        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "matplotlib.rc"),
+        default=os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "matplotlib.rc"
+        ),
     )
     result.add_argument(
         "--detail_level",
@@ -129,7 +129,9 @@ def main():
             message="Following addresses do not look like valid staking addresses: "
             + " ".join(invalid_staking_addresses),
         )
-    if not any([args.checkpoint_output, args.csv_output, args.xlsx_output, args.graph_output]):
+    if not any(
+        [args.checkpoint_output, args.csv_output, args.xlsx_output, args.graph_output]
+    ):
         parser.exit(
             status=1,
             message="No output specified, neeed at least one of --checkpoint_output,"
@@ -199,11 +201,11 @@ def main():
         known_dict=known_dict_from_file,
         truncate_length=args.truncate_length,
         unmute=args.unmute,
-        detail_level=args.detail_level,
     )
     if args.csv_output:
         try:
             reporter.make_transaction_frame(
+                detail_level=args.detail_level,
                 with_total=args.with_total,
                 raw_values=args.raw_values,
             ).to_csv(
@@ -214,13 +216,8 @@ def main():
     if args.xlsx_output:
         try:
             frame = reporter.make_transaction_frame(
+                detail_level=args.detail_level,
                 with_total=args.with_total,
-                text_cleaner=lambda x: ILLEGAL_CHARACTERS_RE.sub(
-                    lambda y: "".join(
-                        ["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]
-                    ),
-                    x,
-                ),
                 raw_values=args.raw_values,
             )
             frame.to_excel(
@@ -239,8 +236,10 @@ def main():
         with mpl.rc_context(fname=args.matplotlib_rc):
             try:
                 reporter.plot_balance()
-                plt.savefig(args.graph_output,
-                            metadata=reporter.get_graph_metadata(args.graph_output))
+                plt.savefig(
+                    args.graph_output,
+                    metadata=reporter.get_graph_metadata(args.graph_output),
+                )
             except OSError as exception:
                 warnings.warn(f"Failed to write graph file: {exception}")
     print("Done.")

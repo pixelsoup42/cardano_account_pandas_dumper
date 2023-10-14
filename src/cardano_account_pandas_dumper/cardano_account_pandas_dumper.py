@@ -1,14 +1,12 @@
 """ Cardano Account To Pandas Dumper."""
-from base64 import b64decode
 import datetime
-from io import BytesIO
 import itertools
 import os
+from base64 import b64decode
 from collections import defaultdict
-from textwrap import wrap
+from io import BytesIO
 from typing import (
     Any,
-    Callable,
     Dict,
     FrozenSet,
     List,
@@ -22,13 +20,12 @@ from typing import (
 
 import blockfrost.utils
 import matplotlib as mpl
-from matplotlib import pyplot
-from matplotlib.axes import Axes
-from matplotlib.image import AxesImage, BboxImage
-from matplotlib.transforms import TransformedBbox
 import numpy as np
 import pandas as pd
 from blockfrost import BlockFrostApi
+from matplotlib import pyplot
+from matplotlib.axes import Axes
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 
 
 class AccountData:
@@ -169,12 +166,10 @@ class AccountPandasDumper:
         known_dict: Any,
         truncate_length: int,
         unmute: bool,
-        detail_level: int,
     ):
         self.data = data
         self.truncate_length = truncate_length
         self.unmute = unmute
-        self.detail_level = detail_level
         self.address_names = pd.Series(
             {a: " wallet" for a in self.data.own_addresses}
             | known_dict.get("addresses", {})
@@ -227,7 +222,11 @@ class AccountPandasDumper:
             return asset.metadata.name
         asset_hex_name = asset.asset.removeprefix(asset.policy_id)
         try:
-            return bytes.fromhex(asset_hex_name).decode()
+            decoded = bytes.fromhex(asset_hex_name).decode()
+            return ILLEGAL_CHARACTERS_RE.sub(
+                lambda y: "".join(["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]),
+                decoded,
+            )
         except UnicodeDecodeError:
             return f"{self._format_policy(asset.policy_id)}@{self._truncate(asset_hex_name)}"
 
@@ -493,12 +492,7 @@ class AccountPandasDumper:
         )
         return result
 
-    def make_balance_frame(
-        self,
-        with_total: bool,
-        raw_values: bool,
-        text_cleaner: Callable = lambda x: x,
-    ):
+    def make_balance_frame(self, with_total: bool, raw_values: bool, detail_level: int):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
             data=[self._transaction_balance(x, raw_values) for x in self.transactions],
@@ -510,7 +504,7 @@ class AccountPandasDumper:
         if not self.unmute:
             self._drop_muted_assets(balance)
 
-        if self.detail_level == 1:
+        if detail_level == 1:
             group: Tuple = (0, 1)
         elif raw_values:
             group = (0, 1, 2)
@@ -550,27 +544,23 @@ class AccountPandasDumper:
         if not raw_values:
             balance.columns = pd.MultiIndex.from_tuples(
                 [
-                    (text_cleaner(self.asset_names.get(c[0], c[0])),)
-                    + cast(tuple, c)[1:]
+                    (self.asset_names.get(c[0], c[0]),) + cast(tuple, c)[1:]
                     for c in balance.columns
                 ]
             )
-        if self.detail_level == 1:
+        if detail_level == 1:
             return balance.xs(self.OWN_LABEL, level=1, axis=1)
         else:
             return balance
 
     def make_transaction_frame(
-        self,
-        raw_values: bool,
-        with_total: bool = True,
-        text_cleaner: Callable = lambda x: x,
+        self, detail_level: int, raw_values: bool, with_total: bool
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
         msg_frame = pd.DataFrame(
             data=[
-                {"hash": x.hash, "message": text_cleaner(self._format_message(x))}
+                {"hash": x.hash, "message": self._format_message(x)}
                 for x in self.transactions
             ],
             index=self.transactions.index,
@@ -590,11 +580,11 @@ class AccountPandasDumper:
                 ]
             )
         balance_frame = self.make_balance_frame(
-            with_total=with_total, text_cleaner=text_cleaner, raw_values=raw_values
+            detail_level=detail_level, with_total=with_total, raw_values=raw_values
         )
         if not raw_values:
             balance_frame.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        if self.detail_level > 1:
+        if detail_level > 1:
             msg_frame.columns = pd.MultiIndex.from_tuples(
                 [
                     (c,) + (len(balance_frame.columns[0]) - 1) * ("",)
@@ -614,11 +604,13 @@ class AccountPandasDumper:
         ticker = None
         name = str(self.asset_names.get(asset_id, asset_id))
         image_data: Any = None
+        url = None
         if asset_id == self.ADA_ASSET:
             ticker = "ADA"
             image_data = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
             )
+            url = "https://cardano.org/"
         else:
             asset_obj = self.data.assets[asset_id]
             if hasattr(asset_obj, "metadata"):
@@ -626,6 +618,8 @@ class AccountPandasDumper:
                     image_data = BytesIO(b64decode(asset_obj.metadata.logo))
                 if hasattr(asset_obj.metadata, "ticker"):
                     ticker = asset_obj.metadata.ticker
+                if hasattr(asset_obj.metadata, "url"):
+                    url = asset_obj.metadata.url
         if ticker:
             ax.text(
                 0.5,
@@ -635,6 +629,8 @@ class AccountPandasDumper:
                 transform=ax.transAxes,
                 fontsize="large",
                 fontweight="bold",
+                clip_on=True,
+                url=url,
             )
         ax.text(
             0.5,
@@ -644,6 +640,7 @@ class AccountPandasDumper:
             transform=ax.transAxes,
             fontsize="xx-small",
             clip_on=True,
+            url=url,
         )
         if image_data:
             ax.set_adjustable("datalim")
@@ -651,13 +648,16 @@ class AccountPandasDumper:
                 mpl.image.imread(image_data),
                 aspect="equal",
                 extent=(0.3, 0.7, 0.8, 0.4),
+                url=url,
             )
             ax.set_xlim((0.0, 1.0))
             ax.set_ylim((1.0, 0.0))
 
     def plot_balance(self, order: str = "appearance"):
         """Create a Matplotlib plot with the asset balance over time."""
-        balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
+        balance = self.make_balance_frame(
+            detail_level=1, with_total=False, raw_values=True
+        ).cumsum()
         if order == "alpha":
             balance.sort_index(
                 axis=1,
