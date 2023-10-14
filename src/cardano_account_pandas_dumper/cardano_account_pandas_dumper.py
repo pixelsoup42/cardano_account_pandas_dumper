@@ -511,7 +511,6 @@ class AccountPandasDumper:
         else:
             group = (0, 2)
         balance = balance.T.groupby(level=group).sum(numeric_only=True).T
-        balance[balance == 0] = pd.NA
         if with_total:
             balance = pd.concat(
                 [
@@ -581,7 +580,7 @@ class AccountPandasDumper:
             )
         balance_frame = self.make_balance_frame(
             detail_level=detail_level, with_total=with_total, raw_values=raw_values
-        )
+        ).replace(0, pd.NA)
         if not raw_values:
             balance_frame.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         if detail_level > 1:
@@ -653,7 +652,9 @@ class AccountPandasDumper:
             ax.set_xlim((0.0, 1.0))
             ax.set_ylim((1.0, 0.0))
 
-    def plot_balance(self, order: str = "appearance"):
+    def plot_balance(
+        self, order: str, graph_width: float, graph_height: float, width_ratio: int
+    ):
         """Create a Matplotlib plot with the asset balance over time."""
         balance = self.make_balance_frame(
             detail_level=1, with_total=False, raw_values=True
@@ -672,15 +673,17 @@ class AccountPandasDumper:
                 level=0,
                 sort_remaining=True,
                 inplace=True,
-                key=lambda i: [balance[x].first_valid_index() for x in i],
+                key=lambda i: [
+                    balance[x].replace(0, pd.NA).first_valid_index() for x in i
+                ],
             )
         else:
             raise ValueError(f"Unkown ordering: {order}")
         fig, ax = pyplot.subplots(
             len(balance.columns),
             2,
-            width_ratios=(6, 1),
-            figsize=(11.69, 2.0675 * len(balance.columns)),
+            width_ratios=(width_ratio, 1),
+            figsize=(graph_width, graph_height * len(balance.columns)),
         )
         fig.suptitle("\n" + self._plot_title() + "\n")
         for i in range(  # pylint: disable=consider-using-enumerate

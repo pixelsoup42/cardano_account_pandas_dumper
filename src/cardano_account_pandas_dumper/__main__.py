@@ -72,12 +72,34 @@ def _create_arg_parser():
         type=str,
     )
     result.add_argument(
+        "--graph_order",
+        help="Graph order of assets: appearance=order of appearance (default), alpha=alphabetical.",
+        type=str,
+        choices=["alpha", "appearance"],
+        default="appearance",
+    )
+    result.add_argument(
         "--matplotlib_rc",
         help="Path to matplotlib defaults file.",
         type=str,
         default=os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "matplotlib.rc"
         ),
+    )
+    result.add_argument(
+        "--graph_width", help="Width of graph, in inches.", type=float, default=11.69
+    )
+    result.add_argument(
+        "--graph_height",
+        help="Height of graph for one asset, in inches.",
+        type=float,
+        default=2.0675,
+    )
+    result.add_argument(
+        "--width_ratio",
+        help="Ratio of plot width to legend with for an asset .",
+        type=int,
+        default=6,
     )
     result.add_argument(
         "--detail_level",
@@ -235,7 +257,12 @@ def main():
     if args.graph_output:
         with mpl.rc_context(fname=args.matplotlib_rc):
             try:
-                reporter.plot_balance()
+                reporter.plot_balance(
+                    order=args.graph_order,
+                    graph_width=args.graph_width,
+                    graph_height=args.graph_height,
+                    width_ratio=args.width_ratio,
+                )
                 plt.savefig(
                     args.graph_output,
                     metadata=reporter.get_graph_metadata(args.graph_output),
