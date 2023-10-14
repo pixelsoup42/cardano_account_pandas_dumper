@@ -594,7 +594,7 @@ class AccountPandasDumper:
     def _plot_title(self):
         return f"Asset balances in wallet until block {self.data.to_block}."
 
-    def plot_balance(self, order:str="alpha"):
+    def plot_balance(self, order:str="appearance"):
         """ Create a Matplotlib plot with the asset balance over time."""
         balance = self.make_balance_frame(with_total=False,raw_values=True).cumsum()
         if order=="alpha":
@@ -606,7 +606,13 @@ class AccountPandasDumper:
                 key=lambda i: [self.asset_names.get(x, x) for x in i],
             )
         elif order=="appearance":
-            pass
+            balance.sort_index(
+                axis=1,
+                level=0,
+                sort_remaining=True,
+                inplace=True,
+                key=lambda i: [balance[x].first_valid_index() for x in i],
+            )
         else:
             raise ValueError(f"Unkown ordering: {order}")
         fig,ax=pyplot.subplots(len(balance.columns),2,
