@@ -1,18 +1,34 @@
 """ Cardano Account To Pandas Dumper."""
+from base64 import b64decode
 import datetime
+from io import BytesIO
 import itertools
 import os
 from collections import defaultdict
-from typing import (Any, Callable, Dict, FrozenSet, List, Mapping,
-                    MutableMapping, Optional, Set, Tuple, cast)
+from textwrap import wrap
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    FrozenSet,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Set,
+    Tuple,
+    cast,
+)
 
 import blockfrost.utils
 import matplotlib as mpl
 from matplotlib import pyplot
+from matplotlib.axes import Axes
+from matplotlib.image import AxesImage, BboxImage
+from matplotlib.transforms import TransformedBbox
 import numpy as np
 import pandas as pd
 from blockfrost import BlockFrostApi
-
 
 
 class AccountData:
@@ -145,7 +161,7 @@ class AccountPandasDumper:
     METADATA_NFT_MINT_LABEL = "721"
 
     # Constants for graph output
-    CREATOR_STRING="https://github.com/pixelsoup42/cardano_account_pandas_dumper"
+    CREATOR_STRING = "https://github.com/pixelsoup42/cardano_account_pandas_dumper"
 
     def __init__(
         self,
@@ -594,10 +610,47 @@ class AccountPandasDumper:
     def _plot_title(self):
         return f"Asset balances in wallet until block {self.data.to_block}."
 
-    def plot_balance(self, order:str="appearance"):
-        """ Create a Matplotlib plot with the asset balance over time."""
-        balance = self.make_balance_frame(with_total=False,raw_values=True).cumsum()
-        if order=="alpha":
+    def _draw_asset_legend(self, ax: Axes, asset_id: str):
+        ticker = None
+        name = str(self.asset_names.get(asset_id, asset_id))
+        image_data: Any = None
+        if asset_id == self.ADA_ASSET:
+            ticker = "ADA"
+            image_data = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "ada_logo.webp"
+            )
+        else:
+            asset_obj = self.data.assets[asset_id]
+            if hasattr(asset_obj, "metadata"):
+                if hasattr(asset_obj.metadata, "logo"):
+                    image_data = BytesIO(b64decode(asset_obj.metadata.logo))
+                if hasattr(asset_obj.metadata, "ticker"):
+                    ticker = asset_obj.metadata.ticker
+        if ticker:
+            ax.text(
+                0.5,
+                0.9,
+                ticker,
+                horizontalalignment="center",
+                transform=ax.transAxes,
+                fontsize="large",
+                fontweight="bold",
+            )
+        ax.text(
+            0.5,
+            0.8,
+            name,
+            horizontalalignment="center",
+            transform=ax.transAxes,
+            fontsize="xx-small",
+        )
+        if image_data:
+            ax.imshow(mpl.image.imread(image_data), aspect="auto")
+
+    def plot_balance(self, order: str = "appearance"):
+        """Create a Matplotlib plot with the asset balance over time."""
+        balance = self.make_balance_frame(with_total=False, raw_values=True).cumsum()
+        if order == "alpha":
             balance.sort_index(
                 axis=1,
                 level=0,
@@ -605,7 +658,7 @@ class AccountPandasDumper:
                 inplace=True,
                 key=lambda i: [self.asset_names.get(x, x) for x in i],
             )
-        elif order=="appearance":
+        elif order == "appearance":
             balance.sort_index(
                 axis=1,
                 level=0,
@@ -615,40 +668,45 @@ class AccountPandasDumper:
             )
         else:
             raise ValueError(f"Unkown ordering: {order}")
-        fig,ax=pyplot.subplots(len(balance.columns),2,
-                               width_ratios=(7,1),
-                               figsize=(11.69,2.0675*len(balance.columns)))
-        fig.suptitle("\n"+self._plot_title()+"\n")
-        for i in range(len((balance.columns))): # pylint: disable=consider-using-enumerate
+        fig, ax = pyplot.subplots(
+            len(balance.columns),
+            2,
+            width_ratios=(6, 1),
+            figsize=(11.69, 2.0675 * len(balance.columns)),
+        )
+        fig.suptitle("\n" + self._plot_title() + "\n")
+        for i in range(  # pylint: disable=consider-using-enumerate
+            len((balance.columns))
+        ):
             ax[i][1].xaxis.set_visible(False)
             ax[i][1].yaxis.set_visible(False)
             ax[i][0].spines.right.set_visible(False)
             ax[i][1].spines.left.set_visible(False)
             balance.plot(
                 y=balance.columns[i],
-                xlim=(min(balance.index),max(balance.index)),
+                xlim=(min(balance.index), max(balance.index)),
                 ax=ax[i][0],
                 legend=False,
             )
-            if i==0 and len(balance.columns)>1:
+            if i == 0 and len(balance.columns) > 1:
                 ax[i][0].xaxis.set_ticks_position("top")
-            elif i<len(balance.columns)-1:
+            elif i < len(balance.columns) - 1:
                 ax[i][0].xaxis.set_ticklabels([])
                 ax[i][0].xaxis.set_ticks_position("none")
                 ax[i][0].spines.bottom.set_visible(False)
                 ax[i][1].spines.bottom.set_visible(False)
+            self._draw_asset_legend(ax[i][1], balance.columns[i])
 
-
-    def get_graph_metadata(self, filename:str) -> Mapping :
+    def get_graph_metadata(self, filename: str) -> Mapping:
         """Return graph metadata for file name."""
-        save_format=os.path.splitext(filename)[1].removeprefix('.')
+        save_format = os.path.splitext(filename)[1].removeprefix(".")
         if not save_format:
-            save_format= mpl.rcParams["savefig.format"]
-        if save_format in ("svg","pdf"):
-            return { "Creator": self.CREATOR_STRING, "Title": self._plot_title() }
-        elif save_format=="png":
-            return {"Software" : self.CREATOR_STRING,"Title": self._plot_title()}
-        elif save_format in ("ps","eps"):
-            return { "Creator": self.CREATOR_STRING }
+            save_format = mpl.rcParams["savefig.format"]
+        if save_format in ("svg", "pdf"):
+            return {"Creator": self.CREATOR_STRING, "Title": self._plot_title()}
+        elif save_format == "png":
+            return {"Software": self.CREATOR_STRING, "Title": self._plot_title()}
+        elif save_format in ("ps", "eps"):
+            return {"Creator": self.CREATOR_STRING}
         else:
             return {}
