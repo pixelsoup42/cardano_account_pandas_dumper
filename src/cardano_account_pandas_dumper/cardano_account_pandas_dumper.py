@@ -539,7 +539,6 @@ class AccountPandasDumper:
                     for c in balance.columns
                 ]
             )
-            balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         if self.detail_level == 1:
             return balance.xs(self.OWN_LABEL, level=1, axis=1)
         else:
@@ -577,6 +576,8 @@ class AccountPandasDumper:
         balance_frame = self.make_balance_frame(
             with_total=with_total, text_cleaner=text_cleaner, raw_values=raw_values
         )
+        if not raw_values:
+            balance_frame.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         if self.detail_level > 1:
             msg_frame.columns = pd.MultiIndex.from_tuples(
                 [
@@ -593,20 +594,44 @@ class AccountPandasDumper:
     def _plot_title(self):
         return f"Asset balances in wallet until block {self.data.to_block}."
 
-    def plot_balance(self):
+    def plot_balance(self, order:str="alpha"):
         """ Create a Matplotlib plot with the asset balance over time."""
-        balance = self.make_balance_frame(with_total=False,raw_values=False).cumsum().replace(pd.NA,0)
+        balance = self.make_balance_frame(with_total=False,raw_values=True).cumsum()
+        if order=="alpha":
+            balance.sort_index(
+                axis=1,
+                level=0,
+                sort_remaining=True,
+                inplace=True,
+                key=lambda i: [self.asset_names.get(x, x) for x in i],
+            )
+        elif order=="appearance":
+            pass
+        else:
+            raise ValueError(f"Unkown ordering: {order}")
         fig,ax=pyplot.subplots(len(balance.columns),2,
                                width_ratios=(7,1),
                                figsize=(11.69,2.0675*len(balance.columns)))
-        fig.suptitle(self._plot_title())
-        for i in range(len((balance.columns))):
-            ax[i][1].axis("off")
+        fig.suptitle("\n"+self._plot_title()+"\n")
+        for i in range(len((balance.columns))): # pylint: disable=consider-using-enumerate
+            ax[i][1].xaxis.set_visible(False)
+            ax[i][1].yaxis.set_visible(False)
+            ax[i][0].spines.right.set_visible(False)
+            ax[i][1].spines.left.set_visible(False)
             balance.plot(
                 y=balance.columns[i],
+                xlim=(min(balance.index),max(balance.index)),
                 ax=ax[i][0],
                 legend=False,
             )
+            if i==0 and len(balance.columns)>1:
+                ax[i][0].xaxis.set_ticks_position("top")
+            elif i<len(balance.columns)-1:
+                ax[i][0].xaxis.set_ticklabels([])
+                ax[i][0].xaxis.set_ticks_position("none")
+                ax[i][0].spines.bottom.set_visible(False)
+                ax[i][1].spines.bottom.set_visible(False)
+
 
     def get_graph_metadata(self, filename:str) -> Mapping :
         """Return graph metadata for file name."""

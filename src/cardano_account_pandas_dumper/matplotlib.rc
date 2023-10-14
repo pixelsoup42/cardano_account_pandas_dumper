@@ -2,10 +2,12 @@
 axes.formatter.limits: -10, 12
 axes.grid: True
 axes.grid.which: both
-axes.spines.bottom: False
-axes.spines.left:   True  # display axis spines
-axes.spines.right:  False
-axes.spines.top:    False
 figure.constrained_layout.use: True
+figure.constrained_layout.h_pad:0
+figure.constrained_layout.w_pad:0
+figure.constrained_layout.hspace: 0
+figure.constrained_layout.wspace: 0
 figure.titleweight: bold
+savefig.bbox:tight
 savefig.pad_inches:0.5
+
