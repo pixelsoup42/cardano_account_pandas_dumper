@@ -1,13 +1,11 @@
+
 axes.formatter.limits: -10, 12
 axes.grid: True
 axes.grid.which: both
-axes.titleweight: bold
+axes.spines.bottom: False
+axes.spines.left:   True  # display axis spines
+axes.spines.right:  False
+axes.spines.top:    False
 figure.constrained_layout.use: True
-figure.figsize: 20,40
-legend.fontsize:medium
-legend.frameon:False
-legend.handleheight:2
-legend.handlelength:2
-legend.labelcolor:linecolor
-legend.loc:upper left
+figure.titleweight: bold
 savefig.pad_inches:0.5

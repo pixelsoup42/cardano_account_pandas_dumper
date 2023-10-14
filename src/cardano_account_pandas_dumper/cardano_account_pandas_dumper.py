@@ -595,14 +595,21 @@ class AccountPandasDumper:
 
     def plot_balance(self):
         """ Create a Matplotlib plot with the asset balance over time."""
-        balance = self.make_balance_frame(with_total=False,raw_values=False).cumsum()
-        balance.plot(
-            title=self._plot_title(),
-            subplots=True
-        )
+        balance = self.make_balance_frame(with_total=False,raw_values=False).cumsum().replace(pd.NA,0)
+        fig,ax=pyplot.subplots(len(balance.columns),2,
+                               width_ratios=(7,1),
+                               figsize=(11.69,2.0675*len(balance.columns)))
+        fig.suptitle(self._plot_title())
+        for i in range(len((balance.columns))):
+            ax[i][1].axis("off")
+            balance.plot(
+                y=balance.columns[i],
+                ax=ax[i][0],
+                legend=False,
+            )
 
     def get_graph_metadata(self, filename:str) -> Mapping :
-        """Return graph metadata depending on file extension."""
+        """Return graph metadata for file name."""
         save_format=os.path.splitext(filename)[1].removeprefix('.')
         if not save_format:
             save_format= mpl.rcParams["savefig.format"]
