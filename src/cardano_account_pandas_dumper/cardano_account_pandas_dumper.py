@@ -608,7 +608,7 @@ class AccountPandasDumper:
         return joined_frame
 
     def _plot_title(self):
-        return f"Asset balances in wallet until block {self.data.to_block}."
+        return f"Asset balances in wallet until block {self.data.to_block}"
 
     def _draw_asset_legend(self, ax: Axes, asset_id: str):
         ticker = None
@@ -643,9 +643,17 @@ class AccountPandasDumper:
             horizontalalignment="center",
             transform=ax.transAxes,
             fontsize="xx-small",
+            clip_on=True,
         )
         if image_data:
-            ax.imshow(mpl.image.imread(image_data), aspect="auto")
+            ax.set_adjustable("datalim")
+            ax.imshow(
+                mpl.image.imread(image_data),
+                aspect="equal",
+                extent=(0.3, 0.7, 0.8, 0.4),
+            )
+            ax.set_xlim((0.0, 1.0))
+            ax.set_ylim((1.0, 0.0))
 
     def plot_balance(self, order: str = "appearance"):
         """Create a Matplotlib plot with the asset balance over time."""
