@@ -8,6 +8,8 @@ Create a spreadsheet with the owned amount of any Cardano asset at the end of a 
 
 Also, provide a reusable module that lets you turn the transaction history of specified staking addresses into a [Pandas](https://pandas.pydata.org/) dataframe for further analysis and processing.
 
+By default, it will also add synthetic transactions with the staking rewards received at the end of each epoch.
+
 ## Requirements
 
 * Python 3.11, possibly works with lower versions, not tested.
@@ -34,6 +36,16 @@ You can then load `report.csv` in your favorite spreadsheet software (eg. Libreo
 If you get a [blockfrost.io](https://blockfrost.io) API error, or if execution is very slow, please see the `blockfrost_project_id` command line flag below.
 
 This basic usage just lists all transactions that affect the specified staking addresses, with the total of each owned asset at the end of the specified `to_block`.
+
+You can also generate graphics output:
+
+```sh
+cardano_account_pandas_dumper  --csv_output report.csv --graph_output report.svg <staking_address1> <staking_address2> ...
+```
+
+that looks like this:
+
+![Sample graphics output](sample_graph.png)
 
 ## Advanced usage
 
@@ -71,11 +83,30 @@ The checkpoint must have been created with the `--checkpoint_output` flag.
 
 `--xlsx_output XLSX_OUTPUT`
 : Path to Excel spreadsheet output file.
-If you want to further process the data with [Pandas](https://pandas.pydata.org/), you can serialize the generated `DataFrame` into a file.
 
 `--csv_output CSV_OUTPUT`
 : Path to CSV output file.
 Specifies the CSV file to write the output to.
+
+`--graph_output CSV_OUTPUT`
+: Path to graph output file.
+Specifies the graphics file to write.
+The format is inferred from the extension, supports all matplotlib formats.
+
+`--graph_order alpha | appearance`
+: Graph order of assets: appearance=order of appearance (default), alpha=alphabetical.
+
+`--matplotlib_rc MATPLOTLIB_RC_PATH`
+: Path to custom matplotlib defaults file.
+
+`--graph_width WIDTH`
+: Width of graph, in inches.
+
+`--graph_height HEIGHT`
+: Height of graph for one asset, in inches.
+
+`--width_ratio FLOAT`
+: Ratio of plot width to legend with for an asset.
 
 `--detail_level DETAIL_LEVEL`
 : Level of detail of report (1=only own addresses, 2=other addresses as well).
@@ -92,16 +123,13 @@ The muted policies are listed in the `known.jsonc` file. This flag disables muti
 When a policy, address or asset is not known, it is listed as a numerical hex value.
 For legibility, those values are truncated to a specific number of digits (6 by default).
 This flag lets you specify another truncation length.
+0 means do not truncate.
 
-`--no_truncate`
-: Do not truncate numerical identifiers.
-If you need numerical hex values to not be truncated at all (see `--truncate_length`above), specify this flag.
+`--with_rewards`
+: Add synthetic transactions for staking rewards (default=True).
 
-`--raw_values`
-: Do not translate policies, assets and addresses to their names, keep them as hex.
-
-`--no_rewards`
-: Do not add pseudo-transactions with rewards for each epoch.
+`--with_total`
+: dd line with totals for each column at the bottom of the spreadsheet (default=True).
 
 ## Output format
 

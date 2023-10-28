@@ -97,7 +97,7 @@ def _create_arg_parser():
     )
     result.add_argument(
         "--width_ratio",
-        help="Ratio of plot width to legend with for an asset .",
+        help="Ratio of plot width to legend with for an asset.",
         type=int,
         default=6,
     )
