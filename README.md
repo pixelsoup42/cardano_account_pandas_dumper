@@ -23,6 +23,16 @@ pipx install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper
 
 Try to run `cardano_account_pandas_dumper -h`. If it fails with `cardano_account_pandas_dumper: command not found`, you need to run `pipx ensurepath` and open a new terminal window to use the tool. If it still doesn't work, you probably need to relogin. This is a one-time setup for all [`pipx`](https://pypa.github.io/pipx/) installs.
 
+## Upgrading
+
+After the first install, run
+
+```sh
+pipx upgrade cardano_account_pandas_dumper
+```
+
+to get the latest version.
+
 ## Basic Usage
 
 The simplest use case is to just run the tool, specifying the CSV output file name and the staking address(es) you are interested in:
