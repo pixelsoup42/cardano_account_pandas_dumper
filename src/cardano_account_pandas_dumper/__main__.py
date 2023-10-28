@@ -6,13 +6,20 @@ import warnings
 from json import JSONDecodeError
 
 import jstyleson
+import matplotlib as mpl
+import matplotlib.pyplot as plt
 from blockfrost import ApiError, BlockFrostApi
-
 from .cardano_account_pandas_dumper import AccountData, AccountPandasDumper
+
+# Error codes due to project key rate limiting or capping
+PROJECT_KEY_ERROR_CODES = frozenset([402, 403, 418, 429])
 
 
 def _create_arg_parser():
-    result = argparse.ArgumentParser(prog="cardano_account_pandas_dumper")
+    result = argparse.ArgumentParser(
+        prog="cardano_account_pandas_dumper",
+        description="Retrieve transaction history for Cardano staking addresses.",
+    )
     exclusive_group = result.add_mutually_exclusive_group()
     result.add_argument(
         "--blockfrost_project_id",
@@ -50,14 +57,49 @@ def _create_arg_parser():
         type=argparse.FileType("rb"),
     )
     result.add_argument(
-        "--pandas_output",
-        help="Path to pickled Pandas dataframe output file.",
+        "--xlsx_output",
+        help="Path to .xlsx output file.",
         type=argparse.FileType("wb"),
     )
     result.add_argument(
         "--csv_output",
         help="Path to CSV output file.",
         type=argparse.FileType("wb"),
+    )
+    result.add_argument(
+        "--graph_output",
+        help="Path to graphics output file.",
+        type=str,
+    )
+    result.add_argument(
+        "--graph_order",
+        help="Graph order of assets: appearance=order of appearance (default), alpha=alphabetical.",
+        type=str,
+        choices=["alpha", "appearance"],
+        default="appearance",
+    )
+    result.add_argument(
+        "--matplotlib_rc",
+        help="Path to matplotlib defaults file.",
+        type=str,
+        default=os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "matplotlib.rc"
+        ),
+    )
+    result.add_argument(
+        "--graph_width", help="Width of graph, in inches.", type=float, default=11.69
+    )
+    result.add_argument(
+        "--graph_height",
+        help="Height of graph for one asset, in inches.",
+        type=float,
+        default=2.0675,
+    )
+    result.add_argument(
+        "--width_ratio",
+        help="Ratio of plot width to legend with for an asset.",
+        type=int,
+        default=6,
     )
     result.add_argument(
         "--detail_level",
@@ -67,24 +109,31 @@ def _create_arg_parser():
     )
     result.add_argument(
         "--unmute",
-        help="Do not mute policies in the mute list and numerical-only metadata.",
+        help="Do not auto-mute anything, do not use muted policies.",
         action="store_true",
     )
     result.add_argument(
         "--truncate_length",
-        help="Length to truncate numerical identifiers to.",
+        help="Length to truncate numerical identifiers to, 0= do not truncate.",
         type=int,
         default=6,
     )
     result.add_argument(
-        "--no_truncate",
-        help="Do not truncate numerical identifiers.",
+        "--raw_values",
+        help="Keep assets, policies and addresses as hex instead of looking up names.",
         action="store_true",
     )
     result.add_argument(
-        "--raw_asset",
-        help="Add header row with concatenation of policy_id and hex-encoded asset_name.",
-        action="store_true",
+        "--with_rewards",
+        help="Add synthetic transactions for rewards.",
+        default=True,
+        type=bool,
+    )
+    result.add_argument(
+        "--with_total",
+        help="Add line with totals for each column at the bottom of the spreadsheet.",
+        default=True,
+        type=bool,
     )
     return result
 
@@ -93,11 +142,22 @@ def main():
     """Main function."""
     parser = _create_arg_parser()
     args = parser.parse_args()
-    if not any([args.checkpoint_output, args.csv_output, args.pandas_output]):
+    invalid_staking_addresses = frozenset(
+        [a for a in args.staking_address if not a.startswith("stake")]
+    )
+    if invalid_staking_addresses:
+        parser.exit(
+            status=1,
+            message="Following addresses do not look like valid staking addresses: "
+            + " ".join(invalid_staking_addresses),
+        )
+    if not any(
+        [args.checkpoint_output, args.csv_output, args.xlsx_output, args.graph_output]
+    ):
         parser.exit(
             status=1,
             message="No output specified, neeed at least one of --checkpoint_output,"
-            + " --csv_output, --pandas_output.\n",
+            + " --csv_output, --xlsx_output, --graph_output.\n",
         )
     known_dict_from_file = jstyleson.load(args.known_file) if args.known_file else {}
     staking_addresses_set = frozenset(args.staking_address)
@@ -117,30 +177,40 @@ def main():
                 ),
                 status=1,
             )
-        if args.to_block is not None and args.to_block > data_from_api.to_block:
+        if args.to_block is not None and args.to_block != data_from_api.to_block:
             parser.exit(
                 message=(
-                    f"Specified to_block {args.to_block} for report, "
-                    + f"available data only to block {data_from_api.to_block}"
+                    f"--to_block {args.to_block} different "
+                    + f"from checkpoint's {data_from_api.to_block}."
                 ),
                 status=1,
             )
-    elif staking_addresses_set:
+    else:
         try:
             api_instance = BlockFrostApi(project_id=args.blockfrost_project_id)
             data_from_api = AccountData(
                 api=api_instance,
                 staking_addresses=staking_addresses_set,
                 to_block=args.to_block,
+                include_rewards=args.with_rewards,
             )
-        except (ApiError, JSONDecodeError, OSError) as exception:
+        except ApiError as api_exception:
             parser.exit(
                 status=2,
                 message=(
-                    f"Failed to read data from blockfrost.io: {exception},"
-                    + " maybe create your own API key at https://blockfrost.io/dashboard and "
-                    + "specify it with the --blockfrost_project_id flag."
+                    f"Failed to read data from blockfrost.io: {api_exception}."
+                    + (
+                        "\nMaybe create your own API key at https://blockfrost.io/dashboard and "
+                        + "specify it with the --blockfrost_project_id flag."
+                    )
+                    if int(api_exception.status_code) in PROJECT_KEY_ERROR_CODES
+                    else ""
                 ),
+            )
+        except (JSONDecodeError, OSError) as exception:
+            parser.exit(
+                status=2,
+                message=(f"Failed to read data from blockfrost.io: {exception},"),
             )
         if args.checkpoint_output:
             try:
@@ -148,34 +218,57 @@ def main():
                 args.checkpoint_output.flush()
             except (pickle.PicklingError, OSError) as exception:
                 warnings.warn(f"Failed to write checkpoint: {exception}")
-    else:
-        parser.exit(status=1, message="Staking address(es) required.")
     reporter = AccountPandasDumper(
         data=data_from_api,
         known_dict=known_dict_from_file,
-        detail_level=args.detail_level,
+        truncate_length=args.truncate_length,
         unmute=args.unmute,
-        truncate_length=None if args.no_truncate else args.truncate_length,
-        raw_asset=args.raw_asset or False,
     )
-    dataframe = reporter.make_transaction_array(args.to_block or data_from_api.to_block)
-    if args.pandas_output:
-        try:
-            dataframe.to_pickle(args.pandas_output)
-        except (pickle.PicklingError, OSError) as exception:
-            warnings.warn(f"Failed to write pandas file: {exception}")
-    # Add total line at the bottom for csv output.
-    total = ["", "Total", ""]
-    for column in dataframe.columns[3:]:
-        # Only NaN is float in the column
-        total.append(sum([a for a in dataframe[column] if not isinstance(a, float)]))
-    dataframe.loc["Total"] = total
-
     if args.csv_output:
         try:
-            dataframe.to_csv(args.csv_output, index=False)
+            reporter.make_transaction_frame(
+                detail_level=args.detail_level,
+                with_total=args.with_total,
+                raw_values=args.raw_values,
+            ).to_csv(
+                args.csv_output,
+            )
         except OSError as exception:
             warnings.warn(f"Failed to write CSV file: {exception}")
+    if args.xlsx_output:
+        try:
+            frame = reporter.make_transaction_frame(
+                detail_level=args.detail_level,
+                with_total=args.with_total,
+                raw_values=args.raw_values,
+            )
+            frame.to_excel(
+                args.xlsx_output,
+                sheet_name=f"Transactions to block {args.to_block}",
+                freeze_panes=(
+                    len(frame.columns[0]) + 1
+                    if isinstance(type(frame.columns[0]), tuple)
+                    else 2,
+                    3,
+                ),
+            )
+        except OSError as exception:
+            warnings.warn(f"Failed to write .xlsx file: {exception}")
+    if args.graph_output:
+        with mpl.rc_context(fname=args.matplotlib_rc):
+            try:
+                reporter.plot_balance(
+                    order=args.graph_order,
+                    graph_width=args.graph_width,
+                    graph_height=args.graph_height,
+                    width_ratio=args.width_ratio,
+                )
+                plt.savefig(
+                    args.graph_output,
+                    metadata=reporter.get_graph_metadata(args.graph_output),
+                )
+            except OSError as exception:
+                warnings.warn(f"Failed to write graph file: {exception}")
     print("Done.")
 
 

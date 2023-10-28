@@ -8,6 +8,8 @@ Create a spreadsheet with the owned amount of any Cardano asset at the end of a 
 
 Also, provide a reusable module that lets you turn the transaction history of specified staking addresses into a [Pandas](https://pandas.pydata.org/) dataframe for further analysis and processing.
 
+By default, it will also add synthetic transactions with the staking rewards received at the end of each epoch.
+
 ## Requirements
 
 * Python 3.11, possibly works with lower versions, not tested.
@@ -34,6 +36,16 @@ You can then load `report.csv` in your favorite spreadsheet software (eg. Libreo
 If you get a [blockfrost.io](https://blockfrost.io) API error, or if execution is very slow, please see the `blockfrost_project_id` command line flag below.
 
 This basic usage just lists all transactions that affect the specified staking addresses, with the total of each owned asset at the end of the specified `to_block`.
+
+You can also generate graphics output:
+
+```sh
+cardano_account_pandas_dumper  --csv_output report.csv --graph_output report.svg <staking_address1> <staking_address2> ...
+```
+
+that looks like this:
+
+![Sample graphics output](sample_graph.png)
 
 ## Advanced usage
 
@@ -69,16 +81,32 @@ For instance, block 8211670 matches EOY 2022 pretty closely.
 : Path to checkpoint file to read, if any.
 The checkpoint must have been created with the `--checkpoint_output` flag.
 
-`--pandas_output PANDAS_OUTPUT`
-: Path to pickled Pandas dataframe output file.
-If you want to further process the data with [Pandas](https://pandas.pydata.org/), you can serialize the generated `DataFrame` into a file.
+`--xlsx_output XLSX_OUTPUT`
+: Path to Excel spreadsheet output file.
 
 `--csv_output CSV_OUTPUT`
 : Path to CSV output file.
-This the flag most people will need, it specifies the CSV file to write the output to.
-Each row is a transaction, each column is a combination of asset + address.
-Addresses belonging to one of the specified staking addresses are labeled as `own`.
-With `--detail_level=2`, known addresses are listed with their name, other addresses are labeled as `other`.
+Specifies the CSV file to write the output to.
+
+`--graph_output CSV_OUTPUT`
+: Path to graph output file.
+Specifies the graphics file to write.
+The format is inferred from the extension, supports all matplotlib formats.
+
+`--graph_order alpha | appearance`
+: Graph order of assets: appearance=order of appearance (default), alpha=alphabetical.
+
+`--matplotlib_rc MATPLOTLIB_RC_PATH`
+: Path to custom matplotlib defaults file.
+
+`--graph_width WIDTH`
+: Width of graph, in inches.
+
+`--graph_height HEIGHT`
+: Height of graph for one asset, in inches.
+
+`--width_ratio FLOAT`
+: Ratio of plot width to legend with for an asset.
 
 `--detail_level DETAIL_LEVEL`
 : Level of detail of report (1=only own addresses, 2=other addresses as well).
@@ -95,21 +123,37 @@ The muted policies are listed in the `known.jsonc` file. This flag disables muti
 When a policy, address or asset is not known, it is listed as a numerical hex value.
 For legibility, those values are truncated to a specific number of digits (6 by default).
 This flag lets you specify another truncation length.
+0 means do not truncate.
 
-`--no_truncate`
-: Do not truncate numerical identifiers.
-If you need numerical hex values to not be truncated at all (see `--truncate_length`above), specify this flag.
+`--with_rewards`
+: Add synthetic transactions for staking rewards (default=True).
 
-`--raw_asset`
-: Add header row with concatenation of policy_id and hex-encoded asset_name.
-This is useful if you need to look up a specific asset.
+`--with_total`
+: dd line with totals for each column at the bottom of the spreadsheet (default=True).
 
-## Calculations and precision
+## Output format
 
-All calculations are done using Python decimals to preserve accuracy.
-However when importing into a spreadsheet, the values are usually converted to floats and some rounding errors can occur.
-This is a spreadsheet issue, there isn't much that can be done by this tool to avoid it.
-If you want to preserve accuracy the best way is probably to write a serialized [Pandas](https://pandas.pydata.org/) dataframe and write some code to process it.
+### CSV and XLSX
+
+column 0:
+transaction timestamp
+
+column 1;
+transaction hash
+
+column 2:
+transaction message
+
+columns 3-...:
+transaction input (positive) or output (negative) for each asset and address.
+
+row 0: asset name
+row 1: address
+
+If the `--raw_values` flag is passed, row 2 is inserted, with a value of `own`for own addresses (belonging to the specified staking addresses)
+and `other` for other addresses.
+Addresses belonging to one of the specified staking addresses are labeled as `own`.
+With `--detail_level=2`, known addresses are listed with their name, other addresses are labeled as `other`.
 
 ## Possible improvements
 
@@ -138,32 +182,3 @@ or purchasing one of our cool [PixelSoup NFTs](https://www.jpg.store/PixelSoup?t
 Donations and NFT purchases are both really appreciated, the advantage of an NFT purchase is that there is a nonzero probability of financial upside.
 
 If you think this tool can be useful to others, please retweet [the announcement](https://twitter.com/PixelSoup42/status/1697305462721396957)
-
-## Comparison with [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter)
-
-After finishing this tool, I was made aware that another comparable project existed: [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter)
-
-Here is a comparison table for both projects (please submit corrections if you think anything is wrong):
-
-| Feature | [cardano_account_pandas_dumper](https://github.com/pixelsoup42/cardano_account_pandas_dumper) | [cardano-accointing-exporter](https://github.com/pabstma/cardano-accointing-exporter) |
-| ------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------|
-| CSV output |✔️|✔️|
-| coingecko integration for fiat price |❌|✔️[^1]|
-| Knows about assets other than ADA |✔️|❌|
-| Knows about DeFI contract addresses |✔️[^2]|❌|
-| Extracts useful information from tx metadata |✔️|❌|
-| Decimal arithmetic for absolute precision |✔️|❌|
-| .xlsx output |❌[^3]|✔️|
-| [Pandas](https://pandas.pydata.org/) compatible |✔️|❌|
-| Ready to use after one-liner install command |✔️|❌|
-| Code is [Mypy](https://mypy-lang.org/) clean |✔️|❌|
-| Lines of Python code in repo (2023-09-01)| 529 | 1011|
-| Has a cool logo 😉 |✔️|❌|
-
-<!-- markdownlint-disable MD053 -->
-
-[^1]: Could not get this to work
-
-[^2]: With `--detail_level=2`
-
-[^3]: Deliberate, since this format is lossy

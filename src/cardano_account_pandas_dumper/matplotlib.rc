@@ -1,0 +1,13 @@
+
+axes.formatter.limits: -10, 12
+axes.grid: True
+axes.grid.which: both
+figure.constrained_layout.use: True
+figure.constrained_layout.h_pad:0
+figure.constrained_layout.w_pad:0
+figure.constrained_layout.hspace: 0
+figure.constrained_layout.wspace: 0
+figure.titleweight: bold
+savefig.bbox:tight
+savefig.pad_inches:0.5
+
