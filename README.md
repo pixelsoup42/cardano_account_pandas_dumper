@@ -139,7 +139,7 @@ This flag lets you specify another truncation length.
 : Add synthetic transactions for staking rewards (default=True).
 
 `--with_total`
-: dd line with totals for each column at the bottom of the spreadsheet (default=True).
+: Add line with totals for each column at the bottom of the spreadsheet (default=True).
 
 ## Output format
 
