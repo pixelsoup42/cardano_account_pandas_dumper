@@ -428,6 +428,7 @@ class AccountPandasDumper:
         self,
         transaction: blockfrost.utils.Namespace,
         raw_values: bool,
+        detail_level: int,
     ) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[(self.ADA_ASSET, self.OTHER_LABEL, "  fees")] += np.longlong(
@@ -500,7 +501,10 @@ class AccountPandasDumper:
     def make_balance_frame(self, with_total: bool, raw_values: bool, detail_level: int):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
-            data=[self._transaction_balance(x, raw_values) for x in self.transactions],
+            data=[
+                self._transaction_balance(x, raw_values, detail_level)
+                for x in self.transactions
+            ],
             index=self.transactions.index,
             dtype="Int64",
         )
