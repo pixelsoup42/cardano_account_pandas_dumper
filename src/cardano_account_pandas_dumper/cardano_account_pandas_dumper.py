@@ -315,13 +315,13 @@ class AccountPandasDumper:
                 )
         for k, redeemer_script in redeemer_scripts.items():
             result.extend([k, str(redeemer_script)])
-        if not result and all(
+        if all(
             [
                 utxo.address in self.data.own_addresses
                 for utxo in tx_obj.utxos.nonref_inputs + tx_obj.utxos.outputs
             ]
         ):
-            result = ["(internal)"]
+            result.extend(["(internal)"])
         return " ".join(result)
 
     def _format_script(self, script: str) -> str:
@@ -430,21 +430,25 @@ class AccountPandasDumper:
         raw_values: bool,
     ) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        result[(self.ADA_ASSET, self.OTHER_LABEL, " fees")] += np.longlong(
+        result[(self.ADA_ASSET, self.OTHER_LABEL, "  fees")] += np.longlong(
             transaction.fees
         )
-        result[(self.ADA_ASSET, self.OWN_LABEL, " deposit")] += np.longlong(
+        result[(self.ADA_ASSET, self.OWN_LABEL, "  deposit")] += np.longlong(
             transaction.deposit
         )
         if transaction.reward_amount:
-            result[(self.ADA_ASSET, self.OTHER_LABEL, " rewards")] -= np.longlong(
-                transaction.reward_amount
-            )
+            result[
+                (
+                    self.ADA_ASSET,
+                    self.OTHER_LABEL,
+                    f" {self._truncate(transaction.reward_address)}-rewards",
+                )
+            ] -= np.longlong(transaction.reward_amount)
             result[
                 (
                     self.ADA_ASSET,
                     self.OWN_LABEL,
-                    f" withdrawals-{self._truncate(transaction.reward_address)}",
+                    f" {self._truncate(transaction.reward_address)}-withdrawals",
                 )
             ] += np.longlong(transaction.reward_amount)
         for _w in transaction.withdrawals:
@@ -452,7 +456,7 @@ class AccountPandasDumper:
                 (
                     self.ADA_ASSET,
                     self.OWN_LABEL,
-                    f" withdrawals-{self._truncate(_w.address)}",
+                    f" {self._truncate(_w.address)}-withdrawals",
                 )
             ] -= np.longlong(_w.amount)
         for utxo in transaction.utxos.nonref_inputs:
