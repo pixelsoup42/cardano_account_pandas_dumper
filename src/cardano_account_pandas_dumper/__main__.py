@@ -218,57 +218,58 @@ def main():
                 args.checkpoint_output.flush()
             except (pickle.PicklingError, OSError) as exception:
                 warnings.warn(f"Failed to write checkpoint: {exception}")
-    reporter = AccountPandasDumper(
-        data=data_from_api,
-        known_dict=known_dict_from_file,
-        truncate_length=args.truncate_length,
-        unmute=args.unmute,
-    )
-    if args.csv_output:
-        try:
-            reporter.make_transaction_frame(
-                detail_level=args.detail_level,
-                with_total=args.with_total,
-                raw_values=args.raw_values,
-            ).to_csv(
-                args.csv_output,
-            )
-        except OSError as exception:
-            warnings.warn(f"Failed to write CSV file: {exception}")
-    if args.xlsx_output:
-        try:
-            frame = reporter.make_transaction_frame(
-                detail_level=args.detail_level,
-                with_total=args.with_total,
-                raw_values=args.raw_values,
-            )
-            frame.to_excel(
-                args.xlsx_output,
-                sheet_name=f"Transactions to block {args.to_block}",
-                freeze_panes=(
-                    len(frame.columns[0]) + 1
-                    if isinstance(type(frame.columns[0]), tuple)
-                    else 2,
-                    3,
-                ),
-            )
-        except OSError as exception:
-            warnings.warn(f"Failed to write .xlsx file: {exception}")
-    if args.graph_output:
-        with mpl.rc_context(fname=args.matplotlib_rc):
+    if any([args.csv_output, args.xlsx_output, args.graph_output]):
+        reporter = AccountPandasDumper(
+            data=data_from_api,
+            known_dict=known_dict_from_file,
+            truncate_length=args.truncate_length,
+            unmute=args.unmute,
+        )
+        if args.csv_output:
             try:
-                reporter.plot_balance(
-                    order=args.graph_order,
-                    graph_width=args.graph_width,
-                    graph_height=args.graph_height,
-                    width_ratio=args.width_ratio,
-                )
-                plt.savefig(
-                    args.graph_output,
-                    metadata=reporter.get_graph_metadata(args.graph_output),
+                reporter.make_transaction_frame(
+                    detail_level=args.detail_level,
+                    with_total=args.with_total,
+                    raw_values=args.raw_values,
+                ).to_csv(
+                    args.csv_output,
                 )
             except OSError as exception:
-                warnings.warn(f"Failed to write graph file: {exception}")
+                warnings.warn(f"Failed to write CSV file: {exception}")
+        if args.xlsx_output:
+            try:
+                frame = reporter.make_transaction_frame(
+                    detail_level=args.detail_level,
+                    with_total=args.with_total,
+                    raw_values=args.raw_values,
+                )
+                frame.to_excel(
+                    args.xlsx_output,
+                    sheet_name=f"Transactions to block {args.to_block}",
+                    freeze_panes=(
+                        len(frame.columns[0]) + 1
+                        if isinstance(type(frame.columns[0]), tuple)
+                        else 2,
+                        3,
+                    ),
+                )
+            except OSError as exception:
+                warnings.warn(f"Failed to write .xlsx file: {exception}")
+        if args.graph_output:
+            with mpl.rc_context(fname=args.matplotlib_rc):
+                try:
+                    reporter.plot_balance(
+                        order=args.graph_order,
+                        graph_width=args.graph_width,
+                        graph_height=args.graph_height,
+                        width_ratio=args.width_ratio,
+                    )
+                    plt.savefig(
+                        args.graph_output,
+                        metadata=reporter.get_graph_metadata(args.graph_output),
+                    )
+                except OSError as exception:
+                    warnings.warn(f"Failed to write graph file: {exception}")
     print("Done.")
 
 
