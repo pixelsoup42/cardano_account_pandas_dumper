@@ -79,20 +79,16 @@ class AccountData:
             if include_rewards
             else {},
         ).sort_index()
-        self.own_addresses = frozenset(
-            [
-                a.address
-                for a in itertools.chain(
-                    *[
-                        api.account_addresses(s, gather_pages=True)
-                        for s in self.staking_addresses
-                    ]
-                )
-            ]
-        )
+        self.addresses = pd.Series(
+            name="Addresses",
+            data={
+                s: api.account_addresses(s, gather_pages=True)
+                for s in self.staking_addresses
+            },
+        ).sort_index()
         self.transactions = pd.Series(
-            name="Transactions", data=self._transaction_data(api)
-        )
+            name="Transactions", data={t.hash: t for t in self._transaction_data(api)}
+        ).sort_index()
         self.assets = pd.Series(
             name="Assets",
             data={
@@ -100,7 +96,7 @@ class AccountData:
                 for a in frozenset(
                     [
                         a.unit
-                        for tx_obj in self.transactions
+                        for tx_obj in self.transactions.values
                         for i in (tx_obj.utxos.inputs + tx_obj.utxos.outputs)
                         for a in i.amount
                     ]
@@ -116,9 +112,9 @@ class AccountData:
         for tx_hash in frozenset(
             [
                 outer_tx.tx_hash
-                for addr in self.own_addresses
+                for addr in itertools.chain(*self.addresses.values)
                 for outer_tx in api.address_transactions(
-                    addr,
+                    addr.address,
                     to_block=self.to_block,
                     gather_pages=True,
                 )
@@ -170,13 +166,17 @@ class AccountPandasDumper:
         self.data = data
         self.truncate_length = truncate_length
         self.unmute = unmute
-        self.address_names = pd.Series(
-            {a: " wallet" for a in self.data.own_addresses}
-            | known_dict.get("addresses", {})
+        self.address_stake = pd.Series(
+            {
+                vi.address: k
+                for k in self.data.addresses.keys()
+                for vi in self.data.addresses[k]
+            },
         )
+        self.address_names = pd.Series(known_dict.get("addresses", {}))
         self.policy_names = pd.Series(known_dict.get("policies", {}))
         self.asset_names = pd.Series(
-            {asset.asset: self._decode_asset_name(asset) for asset in self.data.assets}
+            {asset.asset: self._decode_asset_name(asset) for asset in self.data.assets},
         )
         self.asset_decimals = pd.Series(
             {
@@ -317,7 +317,7 @@ class AccountPandasDumper:
             result.extend([k, str(redeemer_script)])
         if all(
             [
-                utxo.address in self.data.own_addresses
+                utxo.address in self.address_stake.keys()
                 for utxo in tx_obj.utxos.nonref_inputs + tx_obj.utxos.outputs
             ]
         ):
@@ -375,7 +375,6 @@ class AccountPandasDumper:
     ) -> blockfrost.utils.Namespace:
         """Build reward pseudo-transaction for tuple (staking_addr, reward)."""
         result = blockfrost.utils.Namespace()
-        result.tx_hash = None
         result.metadata = [
             blockfrost.utils.Namespace(
                 label=self.METADATA_MESSAGE_LABEL,
@@ -411,16 +410,19 @@ class AccountPandasDumper:
         raw_values: bool,
     ):
         # Index: (asset_id, own, address_name)
+        own_other = (
+            self.OWN_LABEL
+            if utxo.address in self.address_stake.keys()
+            else self.OTHER_LABEL
+        )
         return (
             amount.unit if amount.unit != self.data.LOVELACE_ASSET else self.ADA_ASSET,
-            self.OWN_LABEL
-            if utxo.address in self.data.own_addresses
-            else self.OTHER_LABEL,
+            own_other,
             self._truncate(utxo.address)
             if raw_values
             else self.address_names.get(
                 utxo.address,
-                self.OTHER_LABEL,
+                own_other,
             ),
         )
 
