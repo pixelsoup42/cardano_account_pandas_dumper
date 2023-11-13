@@ -396,6 +396,7 @@ class AccountPandasDumper:
         result.asset_mint_or_burn_count = 0
         result.redeemers = []
         result.hash = None
+        result.withdrawal_count = 0
         result.withdrawals = []
         result.utxos = blockfrost.utils.Namespace()
         result.utxos.inputs = []
