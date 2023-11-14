@@ -57,6 +57,15 @@ class AccountData:
             if include_rewards
             else [],
         )
+        self.mirs = pd.Series(
+            name="MIRs",
+            data=[
+                (s_a, api.account_mirs(s_a, gather_pages=True))
+                for s_a in self.staking_addresses
+            ]
+            if include_rewards
+            else [],
+        )
         self.epochs = pd.Series(
             name="Epochs",
             data={
