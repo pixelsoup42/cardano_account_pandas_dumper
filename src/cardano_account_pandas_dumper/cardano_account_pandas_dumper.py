@@ -409,27 +409,45 @@ class AccountPandasDumper:
         result.utxos.nonref_inputs = []
         return result
 
-    def _column_key(
+    def _own_addr_key(
         self,
-        utxo,
-        amount,
-        raw_values: bool,
-    ):
+        suffix: str,
+        stake: str,
+        addr: Optional[str],
+        detail_level: int,
+    ) -> str:
+        fields: List[str] = []
+        if detail_level > 2:
+            fields.extend([self._truncate(stake)])
+        if detail_level > 3 and addr:
+            fields.extend([self._truncate(addr)])
+        fields.extend([suffix])
+        return " " + "-".join(fields)
+
+    def _column_key(
+        self, utxo, amount, raw_values: bool, detail_level: int
+    ) -> Tuple[str, str, str]:
         # Index: (asset_id, own, address_name)
-        own_other = (
-            self.OWN_LABEL
-            if utxo.address in self.address_stake.keys()
-            else self.OTHER_LABEL
-        )
+        own = utxo.address in self.address_stake.keys()
+        addr = None
+        if utxo.address in self.address_names.keys():
+            if not raw_values:
+                addr = self.address_names[utxo.address]
+            elif not own:
+                addr = self._truncate(utxo.address)
+        if own and addr is None:
+            addr = self._own_addr_key(
+                "Wallet",
+                self.address_stake[utxo.address],
+                utxo.address,
+                detail_level,
+            )
+        if addr is None:
+            addr = self.OTHER_LABEL
         return (
             amount.unit if amount.unit != self.data.LOVELACE_ASSET else self.ADA_ASSET,
-            own_other,
-            self._truncate(utxo.address)
-            if raw_values
-            else self.address_names.get(
-                utxo.address,
-                own_other,
-            ),
+            self.OWN_LABEL if own else self.OTHER_LABEL,
+            addr,
         )
 
     def _transaction_balance(
@@ -450,36 +468,47 @@ class AccountPandasDumper:
                 (
                     self.ADA_ASSET,
                     self.OTHER_LABEL,
-                    f" {self._truncate(transaction.reward_address)}-rewards",
+                    self._own_addr_key(
+                        "rewards",
+                        transaction.reward_address,
+                        None,
+                        detail_level,
+                    ),
                 )
             ] -= np.longlong(transaction.reward_amount)
             result[
                 (
                     self.ADA_ASSET,
                     self.OWN_LABEL,
-                    f" {self._truncate(transaction.reward_address)}-withdrawals",
+                    self._own_addr_key(
+                        "Withdrawals",
+                        transaction.reward_address,
+                        None,
+                        detail_level,
+                    ),
                 )
             ] += np.longlong(transaction.reward_amount)
         for _w in transaction.withdrawals:
+            assert isinstance(_w.address, str)
             result[
                 (
                     self.ADA_ASSET,
                     self.OWN_LABEL,
-                    f" {self._truncate(_w.address)}-withdrawals",
+                    self._own_addr_key("Withdrawals", _w.address, None, detail_level),
                 )
             ] -= np.longlong(_w.amount)
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
-                    result[self._column_key(utxo, amount, raw_values)] -= np.longlong(
-                        amount.quantity
-                    )
+                    result[
+                        self._column_key(utxo, amount, raw_values, detail_level)
+                    ] -= np.longlong(amount.quantity)
 
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
-                result[self._column_key(utxo, amount, raw_values)] += np.longlong(
-                    amount.quantity
-                )
+                result[
+                    self._column_key(utxo, amount, raw_values, detail_level)
+                ] += np.longlong(amount.quantity)
 
         sum_by_asset: MutableMapping[str, np.longlong] = defaultdict(
             lambda: np.longlong(0)
