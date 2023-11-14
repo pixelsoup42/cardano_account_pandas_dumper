@@ -1,7 +1,7 @@
 [project]
 name = "cardano_account_pandas_dumper"
-version = "2023.2.0"
-description = "Create a spreadsheet with the owned amount of any Cardano asset at the end of a specific block, and a record of the transactions that affected it."
+version = "2023.2.1"
+description = "Create a spreadsheet with the owned amount of any Cardano asset at the end of a specific block, and a record of the transactions that affected it. Can also create a graphical representation of each asset's balance over time."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
