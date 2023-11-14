@@ -448,7 +448,7 @@ class AccountPandasDumper:
                 addr = self._truncate(utxo.address)
         if own and addr is None:
             addr = self._own_addr_key(
-                "Wallet",
+                "wallet",
                 self.address_stake[utxo.address],
                 utxo.address,
                 detail_level,
@@ -468,10 +468,10 @@ class AccountPandasDumper:
         detail_level: int,
     ) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        result[(self.ADA_ASSET, self.OTHER_LABEL, "  fees")] += np.longlong(
+        result[(self.ADA_ASSET, self.OTHER_LABEL, " fees")] += np.longlong(
             transaction.fees
         )
-        result[(self.ADA_ASSET, self.OWN_LABEL, "  deposit")] += np.longlong(
+        result[(self.ADA_ASSET, self.OWN_LABEL, "deposit")] += np.longlong(
             transaction.deposit
         )
         if transaction.reward_amount:
@@ -480,7 +480,7 @@ class AccountPandasDumper:
                     self.ADA_ASSET,
                     self.OTHER_LABEL,
                     self._own_addr_key(
-                        "rewards",
+                        " rewards",
                         transaction.reward_address,
                         None,
                         detail_level,
@@ -492,7 +492,7 @@ class AccountPandasDumper:
                     self.ADA_ASSET,
                     self.OWN_LABEL,
                     self._own_addr_key(
-                        "Withdrawals",
+                        "withdrawals",
                         transaction.reward_address,
                         None,
                         detail_level,
@@ -505,7 +505,7 @@ class AccountPandasDumper:
                 (
                     self.ADA_ASSET,
                     self.OWN_LABEL,
-                    self._own_addr_key("Withdrawals", _w.address, None, detail_level),
+                    self._own_addr_key("withdrawals", _w.address, None, detail_level),
                 )
             ] -= np.longlong(_w.amount)
         for _m in transaction.mirs:
@@ -515,7 +515,7 @@ class AccountPandasDumper:
                         self.ADA_ASSET,
                         self.OTHER_LABEL,
                         self._own_addr_key(
-                            "mirs-" + _m.pot,
+                            " mirs-" + _m.pot,
                             _m.address,
                             None,
                             detail_level,
@@ -527,7 +527,7 @@ class AccountPandasDumper:
                         self.ADA_ASSET,
                         self.OWN_LABEL,
                         self._own_addr_key(
-                            "Withdrawals",
+                            "withdrawals",
                             _m.address,
                             None,
                             detail_level,
@@ -586,13 +586,7 @@ class AccountPandasDumper:
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         if not self.unmute:
             self._drop_muted_assets(balance)
-
-        if detail_level == 1:
-            group: Tuple = (0, 1)
-        elif raw_values:
-            group = (0, 1, 2)
-        else:
-            group = (0, 2)
+        group = (0, 1) if detail_level == 1 else (0, 1, 2)
         balance = balance.T.groupby(level=group).sum(numeric_only=True).T
         if with_total:
             balance = pd.concat(
