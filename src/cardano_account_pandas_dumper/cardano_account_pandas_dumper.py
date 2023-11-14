@@ -340,35 +340,32 @@ class AccountPandasDumper:
         ) + (int(transaction.index) * cls.TRANSACTION_OFFSET)
 
     def _drop_muted_assets(self, balance: pd.DataFrame) -> None:
-        # Drop assets that only touch foreign addresses
-        assets_to_drop = frozenset(
-            # Assets that touch other addresses
-            x[:1]
-            for x in balance.xs(self.OTHER_LABEL, level=1, axis=1).columns
-        ).union(
-            # Assets with muted policies
-            frozenset(
-                [
-                    asset.asset
-                    for asset in self.data.assets
-                    if any(self.muted_policies == asset.policy_id)
-                ]
-            )
-        ) - frozenset(
+        all_assets = frozenset([asset.asset for asset in self.data.assets])
+        own_assets = frozenset(
             # Assets that touch own addresses
-            x[:1]
+            x[0]
             for x in balance.xs(self.OWN_LABEL, level=1, axis=1).columns
-        ).union(
-            # Assets with pinned policies
-            frozenset(
-                [
-                    asset.asset
-                    for asset in self.data.assets
-                    if any(self.pinned_policies == asset.policy_id)
-                ]
-            )
         )
-        balance.drop(assets_to_drop, axis=1, inplace=True)
+        muted_assets = frozenset(
+            [
+                asset.asset
+                for asset in self.data.assets
+                if any(self.muted_policies == asset.policy_id)
+            ]
+        )
+        pinned_assets = frozenset(
+            [
+                asset.asset
+                for asset in self.data.assets
+                if any(self.pinned_policies == asset.policy_id)
+            ]
+        )
+        assets_to_drop = (
+            all_assets.difference(own_assets)
+            .union(muted_assets)
+            .difference(pinned_assets)
+        )
+        balance.drop(assets_to_drop, axis=1, level=0, inplace=True)
 
     def reward_transaction(
         self, reward: Tuple[str, blockfrost.utils.Namespace]
