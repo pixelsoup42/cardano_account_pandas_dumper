@@ -35,6 +35,7 @@ class AccountData:
 
     def __init__(
         self,
+        *,
         api: BlockFrostApi,
         staking_addresses: FrozenSet[str],
         to_block: Optional[int],
@@ -53,15 +54,6 @@ class AccountData:
                 for s_a in self.staking_addresses
                 for a_r in api.account_rewards(s_a, gather_pages=True)
                 if a_r.epoch < self.end_epoch
-            ]
-            if include_rewards
-            else [],
-        )
-        self.mirs = pd.Series(
-            name="MIRs",
-            data=[
-                (s_a, api.account_mirs(s_a, gather_pages=True))
-                for s_a in self.staking_addresses
             ]
             if include_rewards
             else [],
@@ -95,8 +87,33 @@ class AccountData:
                 for s in self.staking_addresses
             },
         ).sort_index()
+        tx_hashes = frozenset(
+            [
+                outer_tx.tx_hash
+                for addr in itertools.chain(*self.addresses.values)
+                for outer_tx in api.address_transactions(
+                    addr.address,
+                    to_block=self.to_block,
+                    gather_pages=True,
+                )
+            ]
+        )
+        mir_hashes = frozenset(
+            itertools.chain(
+                *[
+                    [m.tx_hash for m in api.account_mirs(s_a, gather_pages=True)]
+                    for s_a in self.staking_addresses
+                ]
+            )
+            if include_rewards
+            else []
+        )
         self.transactions = pd.Series(
-            name="Transactions", data={t.hash: t for t in self._transaction_data(api)}
+            name="Transactions",
+            data={
+                t.hash: t
+                for t in self._transaction_data(api, tx_hashes.union(mir_hashes))
+            },
         ).sort_index()
         self.assets = pd.Series(
             name="Assets",
@@ -114,38 +131,30 @@ class AccountData:
         ).sort_index()
 
     def _transaction_data(
-        self,
-        api: BlockFrostApi,
+        self, api: BlockFrostApi, tx_hashes: FrozenSet[str]
     ) -> List[blockfrost.utils.Namespace]:
         result_list = []
-        for tx_hash in frozenset(
-            [
-                outer_tx.tx_hash
-                for addr in itertools.chain(*self.addresses.values)
-                for outer_tx in api.address_transactions(
-                    addr.address,
-                    to_block=self.to_block,
-                    gather_pages=True,
-                )
-            ]
-        ):
+        for tx_hash in tx_hashes:
             transaction = api.transaction(tx_hash)
-            transaction.utxos = api.transaction_utxos(tx_hash)
-            transaction.utxos.nonref_inputs = [
-                i for i in transaction.utxos.inputs if not i.reference
-            ]
-            transaction.metadata = api.transaction_metadata(tx_hash)
-            transaction.redeemers = (
-                api.transaction_redeemers(tx_hash) if transaction.redeemer_count else []
-            )
-            transaction.withdrawals = (
-                api.transaction_withdrawals(tx_hash)
-                if transaction.withdrawal_count
-                else []
-            )
-            transaction.reward_amount = None
-
-            result_list.append(transaction)
+            if transaction.block_height <= self.to_block:
+                transaction.utxos = api.transaction_utxos(tx_hash)
+                transaction.utxos.nonref_inputs = [
+                    i for i in transaction.utxos.inputs if not i.reference
+                ]
+                transaction.metadata = api.transaction_metadata(tx_hash)
+                transaction.redeemers = (
+                    api.transaction_redeemers(tx_hash)
+                    if transaction.redeemer_count
+                    else []
+                )
+                transaction.withdrawals = (
+                    api.transaction_withdrawals(tx_hash)
+                    if transaction.withdrawal_count
+                    else []
+                )
+                transaction.reward_amount = None
+                transaction.mirs = api.transaction_mirs(tx_hash)
+                result_list.append(transaction)
         return result_list
 
 
@@ -167,6 +176,7 @@ class AccountPandasDumper:
 
     def __init__(
         self,
+        *,
         data: AccountData,
         known_dict: Any,
         truncate_length: int,
