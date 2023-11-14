@@ -225,36 +225,33 @@ def main():
             truncate_length=args.truncate_length,
             unmute=args.unmute,
         )
-        if args.csv_output:
-            try:
-                reporter.make_transaction_frame(
-                    detail_level=args.detail_level,
-                    with_total=args.with_total,
-                    raw_values=args.raw_values,
-                ).to_csv(
-                    args.csv_output,
-                )
-            except OSError as exception:
-                warnings.warn(f"Failed to write CSV file: {exception}")
-        if args.xlsx_output:
-            try:
-                frame = reporter.make_transaction_frame(
-                    detail_level=args.detail_level,
-                    with_total=args.with_total,
-                    raw_values=args.raw_values,
-                )
-                frame.to_excel(
-                    args.xlsx_output,
-                    sheet_name=f"Transactions to block {args.to_block}",
-                    freeze_panes=(
-                        len(frame.columns[0]) + 1
-                        if isinstance(type(frame.columns[0]), tuple)
-                        else 2,
-                        3,
-                    ),
-                )
-            except OSError as exception:
-                warnings.warn(f"Failed to write .xlsx file: {exception}")
+        if any([args.csv_output, args.xlsx_output]):
+            frame = reporter.make_transaction_frame(
+                detail_level=args.detail_level,
+                with_total=args.with_total,
+                raw_values=args.raw_values,
+            )
+            if args.csv_output:
+                try:
+                    frame.to_csv(
+                        args.csv_output,
+                    )
+                except OSError as exception:
+                    warnings.warn(f"Failed to write CSV file: {exception}")
+            if args.xlsx_output:
+                try:
+                    frame.to_excel(
+                        args.xlsx_output,
+                        sheet_name=f"Transactions to block {args.to_block}",
+                        freeze_panes=(
+                            len(frame.columns[0]) + 1
+                            if isinstance(type(frame.columns[0]), tuple)
+                            else 2,
+                            3,
+                        ),
+                    )
+                except OSError as exception:
+                    warnings.warn(f"Failed to write .xlsx file: {exception}")
         if args.graph_output:
             with mpl.rc_context(fname=args.matplotlib_rc):
                 try:
