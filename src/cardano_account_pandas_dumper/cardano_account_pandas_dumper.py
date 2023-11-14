@@ -433,7 +433,7 @@ class AccountPandasDumper:
         if detail_level > 3 and addr:
             fields.extend([self._truncate(addr)])
         fields.extend([suffix])
-        return " " + "-".join(fields)
+        return "-".join(fields)
 
     def _column_key(
         self, utxo, amount, raw_values: bool, detail_level: int
