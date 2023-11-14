@@ -440,21 +440,20 @@ class AccountPandasDumper:
     ) -> Tuple[str, str, str]:
         # Index: (asset_id, own, address_name)
         own = utxo.address in self.address_stake.keys()
-        addr = None
-        if utxo.address in self.address_names.keys():
-            if not raw_values:
+        if raw_values:
+            addr = self._truncate(utxo.address)
+        else:
+            if utxo.address in self.address_names.keys():
                 addr = self.address_names[utxo.address]
-            elif not own:
-                addr = self._truncate(utxo.address)
-        if own and addr is None:
-            addr = self._own_addr_key(
-                "wallet",
-                self.address_stake[utxo.address],
-                utxo.address,
-                detail_level,
-            )
-        if addr is None:
-            addr = self.OTHER_LABEL
+            elif own:
+                addr = self._own_addr_key(
+                    "wallet",
+                    self.address_stake[utxo.address],
+                    utxo.address,
+                    detail_level,
+                )
+            else:
+                addr = self.OTHER_LABEL
         return (
             amount.unit if amount.unit != self.data.LOVELACE_ASSET else self.ADA_ASSET,
             self.OWN_LABEL if own else self.OTHER_LABEL,
