@@ -417,6 +417,7 @@ class AccountPandasDumper:
         result.utxos.inputs = []
         result.utxos.outputs = []
         result.utxos.nonref_inputs = []
+        result.mirs = []
         return result
 
     def _own_addr_key(
@@ -507,6 +508,32 @@ class AccountPandasDumper:
                     self._own_addr_key("Withdrawals", _w.address, None, detail_level),
                 )
             ] -= np.longlong(_w.amount)
+        for _m in transaction.mirs:
+            if _m.address in self.data.addresses.keys():
+                result[
+                    (
+                        self.ADA_ASSET,
+                        self.OTHER_LABEL,
+                        self._own_addr_key(
+                            "mirs-" + _m.pot,
+                            _m.address,
+                            None,
+                            detail_level,
+                        ),
+                    )
+                ] -= np.longlong(_m.amount)
+                result[
+                    (
+                        self.ADA_ASSET,
+                        self.OWN_LABEL,
+                        self._own_addr_key(
+                            "Withdrawals",
+                            _m.address,
+                            None,
+                            detail_level,
+                        ),
+                    )
+                ] += np.longlong(_m.amount)
         for utxo in transaction.utxos.nonref_inputs:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
