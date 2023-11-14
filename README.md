@@ -135,8 +135,7 @@ The muted policies are listed in the `known.jsonc` file. This flag disables muti
 
 `--truncate_length TRUNCATE_LENGTH`
 : Length to truncate numerical identifiers to.
-When a policy, address or asset is not known, it is listed as a numerical hex value.
-For legibility, those values are truncated to a specific number of digits (6 by default).
+For legibility, policy, address or asset hex values are truncated to a specific number of digits (6 by default).
 This flag lets you specify another truncation length.
 0 means do not truncate.
 
@@ -146,25 +145,21 @@ This flag lets you specify another truncation length.
 `--with_total`
 : Add line with totals for each column at the bottom of the spreadsheet (default=True).
 
-## Output format
+## Output format for CSV and XLSX
 
-### CSV and XLSX
+### Columns
 
-column 0:
-transaction timestamp
+column 0: transaction timestamp  
+column 1: transaction hash  
+column 2: transaction message  
+columns 3-...: transaction input (positive) or output (negative) for each asset and address.
 
-column 1;
-transaction hash
-
-column 2:
-transaction message
-
-columns 3-...:
-transaction input (positive) or output (negative) for each asset and address.
+### Rows
 
 row 0: asset name  
-row 1: `own`for own addresses (belonging to the specified staking addresses) and `other` for other addresses.  
-row 2: address
+row 1: `own` for own addresses (belonging to the specified staking addresses) and `other` for other addresses.  
+row 2: address  
+row 3-...:transaction input (positive) or output (negative) for each transaction.
 
 ## Possible improvements
 
