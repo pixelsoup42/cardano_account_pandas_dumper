@@ -125,7 +125,7 @@ The format is inferred from the extension, supports all matplotlib formats.
 `--detail_level DETAIL_LEVEL`
 : Level of detail of report:  
 1: only show changes to owned addresses  
-2: break down owned + other (not owned) addresses that are known  
+2: show changes to owned + other (not owned) addresses
 3: same as 2, plus break down owned addresses by staking address  
 4: same as 3, plus break down owned addresses by staking address + spending address
 
