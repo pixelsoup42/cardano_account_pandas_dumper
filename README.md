@@ -65,7 +65,9 @@ that looks like this:
 cardano_account_pandas_dumper --detail_level 2 --xlsx_output report.xlsx <staking_address1> <staking_address2> ...
 ```
 
-With `--detail_level 2`, the tool outputs not only the balance and UTXOs of the owned addresses, but also includes external contracts and addresses.
+With `--detail_level 2`, the tool outputs not only the balance of and changes to the owned addresses, but also includes external contracts and addresses.
+
+You can use higher detail levels to break owned address down by staking or spending addresses.
 
 ### Command line flags
 
