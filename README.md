@@ -119,19 +119,23 @@ The format is inferred from the extension, supports all matplotlib formats.
 : Ratio of plot width to legend with for an asset.
 
 `--detail_level DETAIL_LEVEL`
-: Level of detail of report (1=only own addresses, 2=other addresses as well).
-By default (`--detail_level=1`), only addresses linked to the specified staking addresses will be shown.
-With `--detail_level=2`, all addresses will be shown.
+: Level of detail of report:
+1: only break down by own/other addresses  
+2: break down other (not own) addresses that are known  
+3: same as 2, plus break down own addresses by staking address  
+4: same as 3, plus break down own addresses by staking address + spending address
 
 `--unmute`
 : Do not mute policies in the mute list and numerical-only metadata.
 Some DeFI apps like MinSwap are very spammy, by default some NFTs are muted to keep the output lean.
 The muted policies are listed in the `known.jsonc` file. This flag disables muting and shows all assets.
 
+`--raw_values`
+: Keep assets, policies and addresses as hex instead of looking up names.
+
 `--truncate_length TRUNCATE_LENGTH`
 : Length to truncate numerical identifiers to.
-When a policy, address or asset is not known, it is listed as a numerical hex value.
-For legibility, those values are truncated to a specific number of digits (6 by default).
+For legibility, policy, address or asset hex values are truncated to a specific number of digits (6 by default).
 This flag lets you specify another truncation length.
 0 means do not truncate.
 
@@ -141,29 +145,21 @@ This flag lets you specify another truncation length.
 `--with_total`
 : Add line with totals for each column at the bottom of the spreadsheet (default=True).
 
-## Output format
+## Output format for CSV and XLSX
 
-### CSV and XLSX
+### Columns
 
-column 0:
-transaction timestamp
+column 0: transaction timestamp  
+column 1: transaction hash  
+column 2: transaction message  
+columns 3-...: transaction input (positive) or output (negative) for each asset and address.
 
-column 1;
-transaction hash
+### Rows
 
-column 2:
-transaction message
-
-columns 3-...:
-transaction input (positive) or output (negative) for each asset and address.
-
-row 0: asset name
-row 1: address
-
-If the `--raw_values` flag is passed, row 2 is inserted, with a value of `own`for own addresses (belonging to the specified staking addresses)
-and `other` for other addresses.
-Addresses belonging to one of the specified staking addresses are labeled as `own`.
-With `--detail_level=2`, known addresses are listed with their name, other addresses are labeled as `other`.
+row 0: asset name  
+row 1: `own` for own addresses (belonging to the specified staking addresses) and `other` for other addresses.  
+row 2: address  
+row 3-...:transaction input (positive) or output (negative) for each transaction.
 
 ## Possible improvements
 
