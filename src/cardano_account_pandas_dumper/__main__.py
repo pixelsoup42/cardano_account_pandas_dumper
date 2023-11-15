@@ -243,12 +243,7 @@ def main():
                     frame.to_excel(
                         args.xlsx_output,
                         sheet_name=f"Transactions to block {args.to_block}",
-                        freeze_panes=(
-                            len(frame.columns[0]) + 1
-                            if isinstance(type(frame.columns[0]), tuple)
-                            else 2,
-                            3,
-                        ),
+                        freeze_panes=(3, 3),
                     )
                 except OSError as exception:
                     warnings.warn(f"Failed to write .xlsx file: {exception}")
