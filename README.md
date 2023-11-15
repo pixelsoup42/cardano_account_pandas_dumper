@@ -119,7 +119,7 @@ The format is inferred from the extension, supports all matplotlib formats.
 : Ratio of plot width to legend with for an asset.
 
 `--detail_level DETAIL_LEVEL`
-: Level of detail of report:
+: Level of detail of report:  
 1: only break down by own/other addresses  
 2: break down other (not own) addresses that are known  
 3: same as 2, plus break down own addresses by staking address  
