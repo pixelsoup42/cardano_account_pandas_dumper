@@ -122,10 +122,10 @@ The format is inferred from the extension, supports all matplotlib formats.
 
 `--detail_level DETAIL_LEVEL`
 : Level of detail of report:  
-1: only break down by own/other addresses  
-2: break down other (not own) addresses that are known  
-3: same as 2, plus break down own addresses by staking address  
-4: same as 3, plus break down own addresses by staking address + spending address
+1: only show changes to owned addresses  
+2: break down owned + other (not owned) addresses that are known  
+3: same as 2, plus break down owned addresses by staking address  
+4: same as 3, plus break down owned addresses by staking address + spending address
 
 `--unmute`
 : Do not mute policies in the mute list and numerical-only metadata.
