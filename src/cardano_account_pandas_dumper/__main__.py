@@ -222,14 +222,14 @@ def main():
         reporter = AccountPandasDumper(
             data=data_from_api,
             known_dict=known_dict_from_file,
-            truncate_length=args.truncate_length,
-            unmute=args.unmute,
         )
         if any([args.csv_output, args.xlsx_output]):
             frame = reporter.make_transaction_frame(
                 detail_level=args.detail_level,
                 with_total=args.with_total,
                 raw_values=args.raw_values,
+                truncate_length=args.truncate_length,
+                unmute=args.unmute,
             )
             if args.csv_output:
                 try:
@@ -255,6 +255,8 @@ def main():
                         graph_width=args.graph_width,
                         graph_height=args.graph_height,
                         width_ratio=args.width_ratio,
+                        truncate_length=args.truncate_length,
+                        unmute=args.unmute,
                     )
                     plt.savefig(
                         args.graph_output,

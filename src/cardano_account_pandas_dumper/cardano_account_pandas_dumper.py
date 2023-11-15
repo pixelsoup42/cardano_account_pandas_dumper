@@ -1,5 +1,6 @@
 """ Cardano Account To Pandas Dumper."""
 import datetime
+from functools import cache
 import itertools
 import os
 from base64 import b64decode
@@ -179,12 +180,8 @@ class AccountPandasDumper:
         *,
         data: AccountData,
         known_dict: Any,
-        truncate_length: int,
-        unmute: bool,
     ):
         self.data = data
-        self.truncate_length = truncate_length
-        self.unmute = unmute
         self.address_stake = pd.Series(
             {
                 vi.address: k
@@ -194,9 +191,6 @@ class AccountPandasDumper:
         )
         self.address_names = pd.Series(known_dict.get("addresses", {}))
         self.policy_names = pd.Series(known_dict.get("policies", {}))
-        self.asset_names = pd.Series(
-            {asset.asset: self._decode_asset_name(asset) for asset in self.data.assets},
-        )
         self.asset_decimals = pd.Series(
             {
                 asset.asset: np.longlong(asset.metadata.decimals or 0)
@@ -225,14 +219,19 @@ class AccountPandasDumper:
         assert len(transactions) == len(self.data.transactions) + len(self.data.rewards)
         self.transactions = transactions
 
-    def _truncate(self, value: str) -> str:
+    @staticmethod
+    def _truncate(value: str, truncate_length: int) -> str:
         return (
             value
-            if not self.truncate_length or len(value) <= self.truncate_length
-            else ("..." + value[-self.truncate_length :])
+            if not truncate_length or len(value) <= truncate_length
+            else ("..." + value[-truncate_length:])
         )
 
-    def _decode_asset_name(self, asset: blockfrost.utils.Namespace) -> str:
+    @cache  # pylint: disable=method-cache-max-size-none
+    def _decode_asset_name(self, asset_id: str, truncate_length: int) -> str:
+        if asset_id == self.ADA_ASSET:
+            return asset_id
+        asset = self.data.assets[asset_id]
         if (
             hasattr(asset, "metadata")
             and hasattr(asset.metadata, "name")
@@ -247,7 +246,10 @@ class AccountPandasDumper:
                 decoded,
             )
         except UnicodeDecodeError:
-            return f"{self._format_policy(asset.policy_id)}@{self._truncate(asset_hex_name)}"
+            return (
+                f"{self._format_policy(asset.policy_id,truncate_length)}@"
+                + f"{self._truncate(asset_hex_name, truncate_length)}"
+            )
 
     @staticmethod
     def _is_hex_number(num: Any) -> bool:
@@ -257,7 +259,10 @@ class AccountPandasDumper:
             )
         )
 
-    def _munge_metadata(self, obj: blockfrost.utils.Namespace) -> Any:
+    @classmethod
+    def _munge_metadata(
+        cls, *, obj: blockfrost.utils.Namespace, truncate_length: int, unmute: bool
+    ) -> Any:
         if isinstance(obj, blockfrost.utils.Namespace):
             result = {}
             for att in dir(obj):
@@ -266,53 +271,64 @@ class AccountPandasDumper:
                     "to_dict",
                 ):
                     continue
-                hex_name = self._is_hex_number(att)
+                hex_name = cls._is_hex_number(att)
                 value = getattr(obj, att)
-                if (hex_name and self._is_hex_number(value)) and not self.unmute:
+                if (hex_name and cls._is_hex_number(value)) and not unmute:
                     continue
-                value = self._munge_metadata(value)
+                value = cls._munge_metadata(
+                    obj=value, truncate_length=truncate_length, unmute=unmute
+                )
                 if value:
-                    out_att = self._truncate(att) if hex_name else att
+                    out_att = cls._truncate(att, truncate_length) if hex_name else att
                     if out_att == "msg":
                         return (
                             " ".join(value) if isinstance(value, list) else str(value)
                         )
                     result[out_att] = value
             return result
-        elif self._is_hex_number(obj) and not self.unmute:
+        elif cls._is_hex_number(obj) and not unmute:
             return {}
         else:
             return obj
 
-    def _parse_nft_mint(self, meta: blockfrost.utils.Namespace) -> str:
+    def _parse_nft_mint(
+        self, meta: blockfrost.utils.Namespace, truncate_length: int
+    ) -> str:
         meta_dict = meta.to_dict()
         result = "NFT Mint:"
         for policy, _v in meta_dict.items():
             if policy == "version":
                 continue
-            result += f"{self._format_policy(policy)}:"
+            result += f"{self._format_policy(policy,truncate_length)}:"
             for asset_name in _v.to_dict().keys():
                 result += f"{asset_name} "
         return result
 
-    def _format_message(self, tx_obj: blockfrost.utils.Namespace) -> str:
+    def _format_message(
+        self, *, tx_obj: blockfrost.utils.Namespace, truncate_length: int, unmute: bool
+    ) -> str:
         result: List[str] = []
         for metadata_key in tx_obj.metadata:
             if metadata_key.label == self.METADATA_NFT_MINT_LABEL:
                 label = None
-                val = self._parse_nft_mint(metadata_key.json_metadata)
+                val = self._parse_nft_mint(metadata_key.json_metadata, truncate_length)
             else:
                 if metadata_key.label == self.METADATA_MESSAGE_LABEL:
                     label = None
                 else:
                     label = self.labels.get(
-                        metadata_key.label, self._truncate(metadata_key.label)
+                        metadata_key.label,
+                        self._truncate(metadata_key.label, truncate_length),
                     )
-                val = self._munge_metadata(metadata_key.json_metadata)
+                val = self._munge_metadata(
+                    obj=metadata_key.json_metadata,
+                    truncate_length=truncate_length,
+                    unmute=unmute,
+                )
             if (
                 self._is_hex_number(label)
                 and (not val or self._is_hex_number(val))
-                and not self.unmute
+                and not unmute
             ):
                 continue
             if label:
@@ -322,15 +338,15 @@ class AccountPandasDumper:
         for redeemer in tx_obj.redeemers:
             if redeemer.purpose == "spend":
                 redeemer_scripts[redeemer.purpose].add(
-                    self._format_script(redeemer.script_hash)
+                    self._format_script(redeemer.script_hash, truncate_length)
                 )
             elif redeemer.purpose == "mint":
                 redeemer_scripts[redeemer.purpose].add(
-                    self._format_policy(redeemer.script_hash)
+                    self._format_policy(redeemer.script_hash, truncate_length)
                 )
             else:
                 redeemer_scripts[redeemer.purpose].add(
-                    self._truncate(redeemer.redeemer_data_hash)
+                    self._truncate(redeemer.redeemer_data_hash, truncate_length)
                 )
         for k, redeemer_script in redeemer_scripts.items():
             result.extend([k, str(redeemer_script)])
@@ -343,11 +359,11 @@ class AccountPandasDumper:
             result.extend(["(internal)"])
         return " ".join(result)
 
-    def _format_script(self, script: str) -> str:
-        return self.scripts.get(script, self._truncate(script))
+    def _format_script(self, script: str, truncate_length: int) -> str:
+        return self.scripts.get(script, self._truncate(script, truncate_length))
 
-    def _format_policy(self, policy: str) -> Optional[str]:
-        return self.policy_names.get(policy, self._truncate(policy))
+    def _format_policy(self, policy: str, truncate_length: int) -> Optional[str]:
+        return self.policy_names.get(policy, self._truncate(policy, truncate_length))
 
     @classmethod
     def extract_timestamp(
@@ -422,35 +438,38 @@ class AccountPandasDumper:
 
     def _own_addr_key(
         self,
+        *,
         suffix: str,
         stake: str,
-        addr: Optional[str],
+        addr: Optional[str] = None,
         detail_level: int,
+        truncate_length: int,
     ) -> str:
         fields: List[str] = []
         if detail_level > 2:
-            fields.extend([self._truncate(stake)])
+            fields.extend([self._truncate(stake, truncate_length)])
         if detail_level > 3 and addr:
-            fields.extend([self._truncate(addr)])
+            fields.extend([self._truncate(addr, truncate_length)])
         fields.extend([suffix])
         return " " + "-".join(fields)
 
     def _column_key(
-        self, utxo, amount, raw_values: bool, detail_level: int
+        self, *, utxo, amount, raw_values: bool, detail_level: int, truncate_length: int
     ) -> Tuple[str, str, str]:
         # Index: (asset_id, own, address_name)
         own = utxo.address in self.address_stake.keys()
         if raw_values:
-            addr = self._truncate(utxo.address)
+            addr = self._truncate(utxo.address, truncate_length)
         else:
             if utxo.address in self.address_names.keys():
                 addr = self.address_names[utxo.address]
             elif own:
                 addr = self._own_addr_key(
-                    "wallet",
-                    self.address_stake[utxo.address],
-                    utxo.address,
-                    detail_level,
+                    suffix="wallet",
+                    stake=self.address_stake[utxo.address],
+                    addr=utxo.address,
+                    detail_level=detail_level,
+                    truncate_length=truncate_length,
                 )
             else:
                 addr = self.OTHER_LABEL
@@ -462,9 +481,12 @@ class AccountPandasDumper:
 
     def _transaction_balance(
         self,
+        *,
         transaction: blockfrost.utils.Namespace,
         raw_values: bool,
         detail_level: int,
+        truncate_length: int,
+        unmute: bool,
     ) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[(self.ADA_ASSET, self.OTHER_LABEL, "  fees")] += np.longlong(
@@ -479,10 +501,10 @@ class AccountPandasDumper:
                     self.ADA_ASSET,
                     self.OTHER_LABEL,
                     self._own_addr_key(
-                        "rewards",
-                        transaction.reward_address,
-                        None,
-                        detail_level,
+                        suffix="rewards",
+                        stake=transaction.reward_address,
+                        detail_level=detail_level,
+                        truncate_length=truncate_length,
                     ),
                 )
             ] -= np.longlong(transaction.reward_amount)
@@ -491,10 +513,10 @@ class AccountPandasDumper:
                     self.ADA_ASSET,
                     self.OWN_LABEL,
                     self._own_addr_key(
-                        "withdrawals",
-                        transaction.reward_address,
-                        None,
-                        detail_level,
+                        suffix="withdrawals",
+                        stake=transaction.reward_address,
+                        detail_level=detail_level,
+                        truncate_length=truncate_length,
                     ),
                 )
             ] += np.longlong(transaction.reward_amount)
@@ -504,7 +526,12 @@ class AccountPandasDumper:
                 (
                     self.ADA_ASSET,
                     self.OWN_LABEL,
-                    self._own_addr_key("withdrawals", _w.address, None, detail_level),
+                    self._own_addr_key(
+                        suffix="withdrawals",
+                        stake=_w.address,
+                        detail_level=detail_level,
+                        truncate_length=truncate_length,
+                    ),
                 )
             ] -= np.longlong(_w.amount)
         for _m in transaction.mirs:
@@ -514,10 +541,10 @@ class AccountPandasDumper:
                         self.ADA_ASSET,
                         self.OTHER_LABEL,
                         self._own_addr_key(
-                            "mirs-" + _m.pot,
-                            _m.address,
-                            None,
-                            detail_level,
+                            suffix="mirs-" + _m.pot,
+                            stake=_m.address,
+                            detail_level=detail_level,
+                            truncate_length=truncate_length,
                         ),
                     )
                 ] -= np.longlong(_m.amount)
@@ -526,10 +553,10 @@ class AccountPandasDumper:
                         self.ADA_ASSET,
                         self.OWN_LABEL,
                         self._own_addr_key(
-                            "withdrawals",
-                            _m.address,
-                            None,
-                            detail_level,
+                            suffix="withdrawals",
+                            stake=_m.address,
+                            detail_level=detail_level,
+                            truncate_length=truncate_length,
                         ),
                     )
                 ] += np.longlong(_m.amount)
@@ -537,13 +564,25 @@ class AccountPandasDumper:
             if not utxo.collateral or not transaction.valid_contract:
                 for amount in utxo.amount:
                     result[
-                        self._column_key(utxo, amount, raw_values, detail_level)
+                        self._column_key(
+                            utxo=utxo,
+                            amount=amount,
+                            raw_values=raw_values,
+                            detail_level=detail_level,
+                            truncate_length=truncate_length,
+                        )
                     ] -= np.longlong(amount.quantity)
 
         for utxo in transaction.utxos.outputs:
             for amount in utxo.amount:
                 result[
-                    self._column_key(utxo, amount, raw_values, detail_level)
+                    self._column_key(
+                        utxo=utxo,
+                        amount=amount,
+                        raw_values=raw_values,
+                        detail_level=detail_level,
+                        truncate_length=truncate_length,
+                    )
                 ] += np.longlong(amount.quantity)
 
         sum_by_asset: MutableMapping[str, np.longlong] = defaultdict(
@@ -557,13 +596,13 @@ class AccountPandasDumper:
             and len(sum_by_asset) == transaction.asset_mint_or_burn_count
         ), (
             f"Unbalanced transaction: {transaction.hash if transaction.hash else '-'} : "
-            + f"{self._format_message(transaction)} : "
+            + self._format_message(
+                tx_obj=transaction, truncate_length=truncate_length, unmute=unmute
+            )
+            + " : "
             + str(
                 {
-                    (
-                        f"{self._format_policy(self.data.assets[k].policy_id)}@"
-                        + f"{self._decode_asset_name(self.data.assets[k])}"
-                    ): v
+                    self._decode_asset_name(k, truncate_length): v
                     for k, v in sum_by_asset.items()
                     if v != np.longlong(0)
                 }
@@ -571,11 +610,25 @@ class AccountPandasDumper:
         )
         return result
 
-    def make_balance_frame(self, with_total: bool, raw_values: bool, detail_level: int):
+    def make_balance_frame(
+        self,
+        *,
+        with_total: bool,
+        raw_values: bool,
+        detail_level: int,
+        truncate_length: int,
+        unmute: bool,
+    ):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
             data=[
-                self._transaction_balance(x, raw_values, detail_level)
+                self._transaction_balance(
+                    transaction=x,
+                    raw_values=raw_values,
+                    detail_level=detail_level,
+                    truncate_length=truncate_length,
+                    unmute=unmute,
+                )
                 for x in self.transactions
             ],
             index=self.transactions.index,
@@ -583,7 +636,7 @@ class AccountPandasDumper:
         )
         balance.columns = pd.MultiIndex.from_tuples(balance.columns)
         balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        if not self.unmute:
+        if not unmute:
             self._drop_muted_assets(balance)
         group = (0, 1) if detail_level == 1 else (0, 1, 2)
         balance = balance.T.groupby(level=group).sum(numeric_only=True).T
@@ -616,26 +669,41 @@ class AccountPandasDumper:
             axis=1,
         )
 
-        if not raw_values:
-            balance.columns = pd.MultiIndex.from_tuples(
-                [
-                    (self.asset_names.get(c[0], c[0]),) + cast(tuple, c)[1:]
-                    for c in balance.columns
-                ]
-            )
+        balance.columns = pd.MultiIndex.from_tuples(
+            [
+                (
+                    self._truncate(c[0], truncate_length)
+                    if raw_values
+                    else self._decode_asset_name(c[0], truncate_length),
+                )
+                + cast(tuple, c)[1:]
+                for c in balance.columns
+            ]
+        )
         if detail_level == 1:
             return balance.xs(self.OWN_LABEL, level=1, axis=1)
         else:
             return balance
 
     def make_transaction_frame(
-        self, detail_level: int, raw_values: bool, with_total: bool
+        self,
+        *,
+        detail_level: int,
+        raw_values: bool,
+        with_total: bool,
+        truncate_length: int,
+        unmute: bool,
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
         msg_frame = pd.DataFrame(
             data=[
-                {"hash": x.hash, "message": self._format_message(x)}
+                {
+                    "hash": x.hash,
+                    "message": self._format_message(
+                        tx_obj=x, truncate_length=truncate_length, unmute=unmute
+                    ),
+                }
                 for x in self.transactions
             ],
             index=self.transactions.index,
@@ -655,7 +723,11 @@ class AccountPandasDumper:
                 ]
             )
         balance_frame = self.make_balance_frame(
-            detail_level=detail_level, with_total=with_total, raw_values=raw_values
+            detail_level=detail_level,
+            with_total=with_total,
+            raw_values=raw_values,
+            truncate_length=truncate_length,
+            unmute=unmute,
         ).replace(0, pd.NA)
         if not raw_values:
             balance_frame.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
@@ -675,9 +747,9 @@ class AccountPandasDumper:
     def _plot_title(self):
         return f"Asset balances in wallet until block {self.data.to_block}"
 
-    def _draw_asset_legend(self, ax: Axes, asset_id: str):
+    def _draw_asset_legend(self, *, ax: Axes, asset_id: str, truncate_length: int):
         ticker = None
-        name = str(self.asset_names.get(asset_id, asset_id))
+        name = str(self._decode_asset_name(asset_id, truncate_length))
         image_data: Any = None
         url = None
         if asset_id == self.ADA_ASSET:
@@ -729,11 +801,22 @@ class AccountPandasDumper:
             ax.set_ylim((1.0, 0.0))
 
     def plot_balance(
-        self, order: str, graph_width: float, graph_height: float, width_ratio: int
+        self,
+        *,
+        order: str,
+        graph_width: float,
+        graph_height: float,
+        width_ratio: int,
+        truncate_length: int,
+        unmute: bool,
     ):
         """Create a Matplotlib plot with the asset balance over time."""
         balance = self.make_balance_frame(
-            detail_level=1, with_total=False, raw_values=True
+            detail_level=1,
+            with_total=False,
+            raw_values=True,
+            truncate_length=0,
+            unmute=unmute,
         ).cumsum()
         if order == "alpha":
             balance.sort_index(
@@ -741,7 +824,7 @@ class AccountPandasDumper:
                 level=0,
                 sort_remaining=True,
                 inplace=True,
-                key=lambda i: [self.asset_names.get(x, x) for x in i],
+                key=lambda i: [self._decode_asset_name(x, truncate_length) for x in i],
             )
         elif order == "appearance":
             balance.sort_index(
@@ -782,7 +865,11 @@ class AccountPandasDumper:
                 ax[i][0].xaxis.set_ticks_position("none")
                 ax[i][0].spines.bottom.set_visible(False)
                 ax[i][1].spines.bottom.set_visible(False)
-            self._draw_asset_legend(ax[i][1], balance.columns[i])
+            self._draw_asset_legend(
+                ax=ax[i][1],
+                asset_id=balance.columns[i],
+                truncate_length=truncate_length,
+            )
 
     def get_graph_metadata(self, filename: str) -> Mapping:
         """Return graph metadata for file name."""
