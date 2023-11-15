@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# This script tests a clean install to make sure it works.
+
 docker run -i debian <<EOF
 apt update >/dev/null 
 apt install -y pipx git  >/dev/null 
