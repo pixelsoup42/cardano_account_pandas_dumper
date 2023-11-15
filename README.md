@@ -4,7 +4,9 @@
 
 ## Description
 
-Create a spreadsheet with the owned amount of any Cardano asset at the end of a specific block, and a record of the transactions that affected it.
+Create a ledger spreadsheet for a set of Cardano staking addresses, with the owned amount of any Cardano asset at the end of a specific block, and a record of the transactions that affected it.
+
+Can also create a graphical representation of the asset balance over time for the specified staking addresses.
 
 Also, provide a reusable module that lets you turn the transaction history of specified staking addresses into a [Pandas](https://pandas.pydata.org/) dataframe for further analysis and processing.
 
@@ -35,13 +37,13 @@ to get the latest version.
 
 ## Basic Usage
 
-The simplest use case is to just run the tool, specifying the CSV output file name and the staking address(es) you are interested in:
+The simplest use case is to just run the tool, specifying the xlsx output file name and the staking address(es) you are interested in:
 
 ```sh
-cardano_account_pandas_dumper  --csv_output report.csv <staking_address1> <staking_address2> ...
+cardano_account_pandas_dumper  --xlsx_output report.xlsx <staking_address1> <staking_address2> ...
 ```
 
-You can then load `report.csv` in your favorite spreadsheet software (eg. Libreoffice Calc or Excel)
+You can then load `report.xlsx` in your favorite spreadsheet software (eg. Libreoffice Calc or Excel)
 
 If you get a [blockfrost.io](https://blockfrost.io) API error, or if execution is very slow, please see the `blockfrost_project_id` command line flag below.
 
@@ -50,7 +52,7 @@ This basic usage just lists all transactions that affect the specified staking a
 You can also generate graphics output:
 
 ```sh
-cardano_account_pandas_dumper  --csv_output report.csv --graph_output report.svg <staking_address1> <staking_address2> ...
+cardano_account_pandas_dumper  --xlsx_output report.xlsx --graph_output report.svg <staking_address1> <staking_address2> ...
 ```
 
 that looks like this:
@@ -60,7 +62,7 @@ that looks like this:
 ## Advanced usage
 
 ```sh
-cardano_account_pandas_dumper --detail_level 2 --csv_output report.csv <staking_address1> <staking_address2> ...
+cardano_account_pandas_dumper --detail_level 2 --xlsx_output report.xlsx <staking_address1> <staking_address2> ...
 ```
 
 With `--detail_level 2`, the tool outputs not only the balance and UTXOs of the owned addresses, but also includes external contracts and addresses.
@@ -98,7 +100,7 @@ The checkpoint must have been created with the `--checkpoint_output` flag.
 : Path to CSV output file.
 Specifies the CSV file to write the output to.
 
-`--graph_output CSV_OUTPUT`
+`--graph_output GRAPH_OUTPUT`
 : Path to graph output file.
 Specifies the graphics file to write.
 The format is inferred from the extension, supports all matplotlib formats.
