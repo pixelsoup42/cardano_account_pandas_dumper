@@ -433,7 +433,7 @@ class AccountPandasDumper:
         if detail_level > 3 and addr:
             fields.extend([self._truncate(addr)])
         fields.extend([suffix])
-        return "-".join(fields)
+        return " " + "-".join(fields)
 
     def _column_key(
         self, utxo, amount, raw_values: bool, detail_level: int
@@ -467,10 +467,10 @@ class AccountPandasDumper:
         detail_level: int,
     ) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
-        result[(self.ADA_ASSET, self.OTHER_LABEL, " fees")] += np.longlong(
+        result[(self.ADA_ASSET, self.OTHER_LABEL, "  fees")] += np.longlong(
             transaction.fees
         )
-        result[(self.ADA_ASSET, self.OWN_LABEL, "deposit")] += np.longlong(
+        result[(self.ADA_ASSET, self.OWN_LABEL, "  deposit")] += np.longlong(
             transaction.deposit
         )
         if transaction.reward_amount:
@@ -479,7 +479,7 @@ class AccountPandasDumper:
                     self.ADA_ASSET,
                     self.OTHER_LABEL,
                     self._own_addr_key(
-                        " rewards",
+                        "rewards",
                         transaction.reward_address,
                         None,
                         detail_level,
@@ -514,7 +514,7 @@ class AccountPandasDumper:
                         self.ADA_ASSET,
                         self.OTHER_LABEL,
                         self._own_addr_key(
-                            " mirs-" + _m.pot,
+                            "mirs-" + _m.pot,
                             _m.address,
                             None,
                             detail_level,
