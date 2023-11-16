@@ -618,6 +618,7 @@ class AccountPandasDumper:
         detail_level: int,
         truncate_length: int,
         unmute: bool,
+        add_asset_id: bool,
     ):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
@@ -672,14 +673,20 @@ class AccountPandasDumper:
         balance.columns = pd.MultiIndex.from_tuples(
             [
                 (
-                    self._truncate(c[0], truncate_length)
-                    if raw_values
-                    else self._decode_asset_name(c[0], truncate_length),
+                    (
+                        self._truncate(c[0], truncate_length)
+                        if raw_values
+                        else self._decode_asset_name(c[0], truncate_length)
+                    )
+                    + (
+                        f"\n{c[0]}" if (add_asset_id and c[0] != self.ADA_ASSET) else ""
+                    ),
                 )
                 + cast(tuple, c)[1:]
                 for c in balance.columns
             ]
         )
+        balance.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
         if detail_level == 1:
             return balance.xs(self.OWN_LABEL, level=1, axis=1)
         else:
@@ -693,6 +700,7 @@ class AccountPandasDumper:
         with_total: bool,
         truncate_length: int,
         unmute: bool,
+        add_asset_id: bool,
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
@@ -728,10 +736,9 @@ class AccountPandasDumper:
             raw_values=raw_values,
             truncate_length=truncate_length,
             unmute=unmute,
+            add_asset_id=add_asset_id,
         ).replace(0, pd.NA)
-        if not raw_values:
-            balance_frame.sort_index(axis=1, level=0, sort_remaining=True, inplace=True)
-        if detail_level > 1:
+        if isinstance(balance_frame.columns[0], tuple):
             msg_frame.columns = pd.MultiIndex.from_tuples(
                 [
                     (c,) + (len(balance_frame.columns[0]) - 1) * ("",)
@@ -817,6 +824,7 @@ class AccountPandasDumper:
             raw_values=True,
             truncate_length=0,
             unmute=unmute,
+            add_asset_id=False,
         ).cumsum()
         if order == "alpha":
             balance.sort_index(

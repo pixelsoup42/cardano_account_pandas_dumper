@@ -149,6 +149,9 @@ This flag lets you specify another truncation length.
 `--with_total`
 : Add line with totals for each column at the bottom of the spreadsheet (default=True).
 
+`--add_asset_id`
+: Add line with raw asset id to asset column header (to help looking up asset metadata).
+
 ## Output format for CSV and XLSX
 
 ### Columns

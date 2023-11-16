@@ -22,6 +22,11 @@ def _create_arg_parser():
     )
     exclusive_group = result.add_mutually_exclusive_group()
     result.add_argument(
+        "--add_asset_id",
+        help="Add line with raw asset id to asset column header.",
+        action="store_true",
+    )
+    result.add_argument(
         "--blockfrost_project_id",
         nargs="?",
         default="mainnetRlrNKtjWWp7VkzwRBrragNvtSsKyOeA4",
@@ -230,6 +235,7 @@ def main():
                 raw_values=args.raw_values,
                 truncate_length=args.truncate_length,
                 unmute=args.unmute,
+                add_asset_id=args.add_asset_id,
             )
             if args.csv_output:
                 try:
