@@ -27,6 +27,11 @@ def _create_arg_parser():
         action="store_true",
     )
     result.add_argument(
+        "--asset_with_policy",
+        help="Always prepend policy to asset name",
+        action="store_true",
+    )
+    result.add_argument(
         "--blockfrost_project_id",
         nargs="?",
         default="mainnetRlrNKtjWWp7VkzwRBrragNvtSsKyOeA4",
@@ -236,6 +241,7 @@ def main():
                 truncate_length=args.truncate_length,
                 unmute=args.unmute,
                 add_asset_id=args.add_asset_id,
+                asset_with_policy=args.asset_with_policy,
             )
             if args.csv_output:
                 try:
@@ -263,6 +269,7 @@ def main():
                         width_ratio=args.width_ratio,
                         truncate_length=args.truncate_length,
                         unmute=args.unmute,
+                        asset_with_policy=args.asset_with_policy,
                     )
                     plt.savefig(
                         args.graph_output,

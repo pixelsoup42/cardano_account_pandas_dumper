@@ -228,7 +228,9 @@ class AccountPandasDumper:
         )
 
     @cache  # pylint: disable=method-cache-max-size-none
-    def _decode_asset_name(self, asset_id: str, truncate_length: int) -> str:
+    def _decode_asset_name(
+        self, asset_id: str, truncate_length: int, with_policy: bool
+    ) -> str:
         if asset_id == self.ADA_ASSET:
             return asset_id
         asset = self.data.assets[asset_id]
@@ -237,19 +239,21 @@ class AccountPandasDumper:
             and hasattr(asset.metadata, "name")
             and asset.metadata.name
         ):
-            return asset.metadata.name
+            name = asset.metadata.name
         asset_hex_name = asset.asset.removeprefix(asset.policy_id)
         try:
             decoded = bytes.fromhex(asset_hex_name).decode()
-            return ILLEGAL_CHARACTERS_RE.sub(
+            name = ILLEGAL_CHARACTERS_RE.sub(
                 lambda y: "".join(["\\x0" + hex(ord(y.group(0))).removeprefix("0x")]),
                 decoded,
             )
         except UnicodeDecodeError:
-            return (
-                f"{self._format_policy(asset.policy_id,truncate_length)}@"
-                + f"{self._truncate(asset_hex_name, truncate_length)}"
-            )
+            name = self._truncate(asset_hex_name, truncate_length)
+            with_policy = True
+        if with_policy:
+            return f"{self._format_policy(asset.policy_id,truncate_length)}@{name}"
+        else:
+            return name
 
     @staticmethod
     def _is_hex_number(num: Any) -> bool:
@@ -487,6 +491,7 @@ class AccountPandasDumper:
         detail_level: int,
         truncate_length: int,
         unmute: bool,
+        asset_with_policy: bool,
     ) -> Any:
         result: MutableMapping[Tuple, np.longlong] = defaultdict(lambda: np.longlong(0))
         result[(self.ADA_ASSET, self.OTHER_LABEL, "  fees")] += np.longlong(
@@ -602,7 +607,7 @@ class AccountPandasDumper:
             + " : "
             + str(
                 {
-                    self._decode_asset_name(k, truncate_length): v
+                    self._decode_asset_name(k, truncate_length, asset_with_policy): v
                     for k, v in sum_by_asset.items()
                     if v != np.longlong(0)
                 }
@@ -619,6 +624,7 @@ class AccountPandasDumper:
         truncate_length: int,
         unmute: bool,
         add_asset_id: bool,
+        asset_with_policy: bool,
     ):
         """Make DataFrame with transaction balances."""
         balance = pd.DataFrame(
@@ -629,6 +635,7 @@ class AccountPandasDumper:
                     detail_level=detail_level,
                     truncate_length=truncate_length,
                     unmute=unmute,
+                    asset_with_policy=asset_with_policy,
                 )
                 for x in self.transactions
             ],
@@ -676,7 +683,9 @@ class AccountPandasDumper:
                     (
                         self._truncate(c[0], truncate_length)
                         if raw_values
-                        else self._decode_asset_name(c[0], truncate_length)
+                        else self._decode_asset_name(
+                            c[0], truncate_length, asset_with_policy
+                        )
                     )
                     + (
                         f"\n{c[0]}" if (add_asset_id and c[0] != self.ADA_ASSET) else ""
@@ -701,6 +710,7 @@ class AccountPandasDumper:
         truncate_length: int,
         unmute: bool,
         add_asset_id: bool,
+        asset_with_policy: bool,
     ) -> pd.DataFrame:
         """Build a transaction spreadsheet."""
 
@@ -737,6 +747,7 @@ class AccountPandasDumper:
             truncate_length=truncate_length,
             unmute=unmute,
             add_asset_id=add_asset_id,
+            asset_with_policy=asset_with_policy,
         ).replace(0, pd.NA)
         if isinstance(balance_frame.columns[0], tuple):
             msg_frame.columns = pd.MultiIndex.from_tuples(
@@ -754,9 +765,10 @@ class AccountPandasDumper:
     def _plot_title(self):
         return f"Asset balances in wallet until block {self.data.to_block}"
 
-    def _draw_asset_legend(self, *, ax: Axes, asset_id: str, truncate_length: int):
+    def _draw_asset_legend(
+        self, *, ax: Axes, asset_id: str, truncate_length: int, asset_with_policy: bool
+    ):
         ticker = None
-        name = str(self._decode_asset_name(asset_id, truncate_length))
         image_data: Any = None
         url = None
         if asset_id == self.ADA_ASSET:
@@ -789,7 +801,7 @@ class AccountPandasDumper:
         ax.text(
             0.5,
             0.8,
-            name,
+            self._decode_asset_name(asset_id, truncate_length, asset_with_policy),
             horizontalalignment="center",
             transform=ax.transAxes,
             fontsize="xx-small",
@@ -816,6 +828,7 @@ class AccountPandasDumper:
         width_ratio: int,
         truncate_length: int,
         unmute: bool,
+        asset_with_policy: bool,
     ):
         """Create a Matplotlib plot with the asset balance over time."""
         balance = self.make_balance_frame(
@@ -825,6 +838,7 @@ class AccountPandasDumper:
             truncate_length=0,
             unmute=unmute,
             add_asset_id=False,
+            asset_with_policy=asset_with_policy,
         ).cumsum()
         if order == "alpha":
             balance.sort_index(
@@ -832,7 +846,10 @@ class AccountPandasDumper:
                 level=0,
                 sort_remaining=True,
                 inplace=True,
-                key=lambda i: [self._decode_asset_name(x, truncate_length) for x in i],
+                key=lambda i: [
+                    self._decode_asset_name(x, truncate_length, asset_with_policy)
+                    for x in i
+                ],
             )
         elif order == "appearance":
             balance.sort_index(
@@ -877,6 +894,7 @@ class AccountPandasDumper:
                 ax=ax[i][1],
                 asset_id=balance.columns[i],
                 truncate_length=truncate_length,
+                asset_with_policy=asset_with_policy,
             )
 
     def get_graph_metadata(self, filename: str) -> Mapping:

@@ -152,6 +152,9 @@ This flag lets you specify another truncation length.
 `--add_asset_id`
 : Add line with raw asset id to asset column header (to help looking up asset metadata).
 
+`--asset_with_policy`
+: Always prepend policy to asset name.
+
 ## Output format for CSV and XLSX
 
 ### Columns
