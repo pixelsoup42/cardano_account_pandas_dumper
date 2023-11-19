@@ -23,7 +23,21 @@ By default, it will also add synthetic transactions with the staking rewards rec
 pipx install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper
 ```
 
-Try to run `cardano_account_pandas_dumper -h`. If it fails with `cardano_account_pandas_dumper: command not found`, you need to run `pipx ensurepath` and open a new terminal window to use the tool. If it still doesn't work, you probably need to relogin. This is a one-time setup for all [`pipx`](https://pypa.github.io/pipx/) installs.
+Try to run `cardano_account_pandas_dumper -h`. If what you see doesn't start with
+
+``` sh
+usage: cardano_account_pandas_dumper [-h] [--blockfrost_project_id [BLOCKFROST_PROJECT_ID]] [--checkpoint_output [CHECKPOINT_OUTPUT]] [--to_block TO_BLOCK]
+                                     [--known_file [KNOWN_FILE]] [--from_checkpoint [FROM_CHECKPOINT]] [--xlsx_output XLSX_OUTPUT] [--csv_output CSV_OUTPUT]
+                                     [--graph_output GRAPH_OUTPUT] [--graph_order {alpha,appearance}] [--matplotlib_rc MATPLOTLIB_RC] [--graph_width GRAPH_WIDTH]
+                                     [--graph_height GRAPH_HEIGHT] [--width_ratio WIDTH_RATIO] [--detail_level DETAIL_LEVEL] [--unmute]
+                                     [--truncate_length TRUNCATE_LENGTH] [--raw_values] [--with_rewards WITH_REWARDS] [--with_total WITH_TOTAL]
+                                     staking_address [staking_address ...]
+
+Retrieve transaction history for Cardano staking addresses.
+...
+```
+
+then see the[Troubleshooting](#troubleshooting) section.
 
 ## Upgrading
 
@@ -68,6 +82,20 @@ cardano_account_pandas_dumper --detail_level 2 --xlsx_output report.xlsx <stakin
 With `--detail_level 2`, the tool outputs not only the balance of and changes to the owned addresses, but also includes external contracts and addresses.
 
 You can use higher detail levels to break owned address down by staking or spending addresses.
+
+### Troubleshooting
+
+#### If the cardano_account_pandas_dumper command is not found
+
+* Run the command `pipx ensurepath`. If  [`pipx`](https://pypa.github.io/pipx/) is not found you need to install it.
+* Run the command `pipx install git+<https://github.com/pixelsoup42/cardano_account_pandas_dumper>`
+* Run the command `cardano_account_pandas_dumper -h`
+* If the `cardano_account_pandas_dumper command` is still not found, you need to re-login (close your session and log in again) and retry.
+
+#### If the command fails with an API error
+
+* If the message suggests creating your own API key you should probably do that.
+* Otherwise, try upgrading the tool by running the command `pipx upgrade cardano_account_pandas_dumper`.
 
 ### Command line flags
 
@@ -161,7 +189,7 @@ This flag lets you specify another truncation length.
 
 column 0: transaction timestamp  
 column 1: transaction hash  
-column 2: transaction message  
+column 2: transaction message parsed from metadata
 columns 3-...: transaction input (positive) or output (negative) for each asset and address.
 
 ### Rows
