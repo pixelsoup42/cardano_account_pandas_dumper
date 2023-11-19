@@ -88,7 +88,7 @@ You can use higher detail levels to break owned address down by staking or spend
 #### If the cardano_account_pandas_dumper command is not found
 
 * Run the command `pipx ensurepath`. If  [`pipx`](https://pypa.github.io/pipx/) is not found you need to install it.
-* Run the command `pipx install git+<https://github.com/pixelsoup42/cardano_account_pandas_dumper>`
+* Run the command `pipx install git+https://github.com/pixelsoup42/cardano_account_pandas_dumper`
 * Run the command `cardano_account_pandas_dumper -h`
 * If the `cardano_account_pandas_dumper command` is still not found, you need to re-login (close your session and log in again) and retry.
 
