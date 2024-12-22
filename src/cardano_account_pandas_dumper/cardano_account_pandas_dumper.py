@@ -1,4 +1,5 @@
 """ Cardano Account To Pandas Dumper."""
+
 import datetime
 from functools import cache
 import itertools
@@ -50,36 +51,42 @@ class AccountData:
         self.end_epoch = block_last.epoch + 1
         self.rewards = pd.Series(
             name="Rewards",
-            data=[
-                (s_a, a_r)
-                for s_a in self.staking_addresses
-                for a_r in api.account_rewards(s_a, gather_pages=True)
-                if a_r.epoch < self.end_epoch
-            ]
-            if include_rewards
-            else [],
+            data=(
+                [
+                    (s_a, a_r)
+                    for s_a in self.staking_addresses
+                    for a_r in api.account_rewards(s_a, gather_pages=True)
+                    if a_r.epoch < self.end_epoch
+                ]
+                if include_rewards
+                else []
+            ),
         )
         self.epochs = pd.Series(
             name="Epochs",
-            data={
-                e: api.epoch(e)
-                for e in frozenset(
-                    itertools.chain(
-                        *[[r[1].epoch, r[1].epoch + 1] for r in self.rewards]
+            data=(
+                {
+                    e: api.epoch(e)
+                    for e in frozenset(
+                        itertools.chain(
+                            *[[r[1].epoch, r[1].epoch + 1] for r in self.rewards]
+                        )
                     )
-                )
-            }
-            if include_rewards
-            else {},
+                }
+                if include_rewards
+                else {}
+            ),
         ).sort_index()
         self.pools = pd.Series(
             name="Pools",
-            data={
-                pool: api.pool_metadata(pool)
-                for pool in frozenset([r[1].pool_id for r in self.rewards])
-            }
-            if include_rewards
-            else {},
+            data=(
+                {
+                    pool: api.pool_metadata(pool)
+                    for pool in frozenset([r[1].pool_id for r in self.rewards])
+                }
+                if include_rewards
+                else {}
+            ),
         ).sort_index()
         self.addresses = pd.Series(
             name="Addresses",
@@ -193,9 +200,12 @@ class AccountPandasDumper:
         self.policy_names = pd.Series(known_dict.get("policies", {}))
         self.asset_decimals = pd.Series(
             {
-                asset.asset: np.longlong(asset.metadata.decimals or 0)
-                if hasattr(asset, "metadata") and hasattr(asset.metadata, "decimals")
-                else 0
+                asset.asset: (
+                    np.longlong(asset.metadata.decimals or 0)
+                    if hasattr(asset, "metadata")
+                    and hasattr(asset.metadata, "decimals")
+                    else 0
+                )
                 for asset in self.data.assets
             }
             | {self.ADA_ASSET: self.ADA_DECIMALS}
@@ -597,8 +607,8 @@ class AccountPandasDumper:
             sum_by_asset[key[0]] += value
         sum_by_asset = {k: v for k, v in sum_by_asset.items() if v}
         assert (
-            self.ADA_ASSET not in sum_by_asset
-            and len(sum_by_asset) == transaction.asset_mint_or_burn_count
+            len(sum_by_asset) - (1 if self.ADA_ASSET in sum_by_asset else 0)
+            == transaction.asset_mint_or_burn_count
         ), (
             f"Unbalanced transaction: {transaction.hash if transaction.hash else '-'} : "
             + self._format_message(
